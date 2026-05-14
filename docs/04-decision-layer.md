@@ -2,60 +2,73 @@
 
 ## Purpose
 
-Given a context packet, the decision layer answers: **should I act, and if so, what should I do?**
+The decision layer is the interface between Wade's platform infrastructure and a worker's logic. Wade assembles context and delivers it; the worker decides what to do with it.
 
-This is where the LLM lives. The decision layer is an LLM call with a structured prompt, a structured output schema, and enough surrounding logic to make it reliable and auditable.
+Wade defines the contract — what comes in, what must come out. Workers implement the logic — what to reason about, how to reason, and why.
 
-## Input / Output
+## The Contract
 
-**Input**: the context packet from [Context Assembly](03-context-assembly.md)
+**Input**: a context packet from [Context Assembly](03-context-assembly.md), delivered to the worker on every relevant event.
 
-**Output**:
+**Output** (required from the worker):
 ```
 {
-  action:    "implement" | "ask_question" | "comment" | "claim" | "ignore" | "escalate",
-  reasoning: string,   // Wade's explanation of why it chose this action
+  action:    string,   // one of the platform action types, or a worker-defined extension
+  reasoning: string,   // explanation of the decision — written to the thread as a context note
   params:    object    // action-specific parameters
 }
 ```
 
-The `reasoning` field is not just for debugging — it gets written as a context note on the thread, so future decisions have access to why prior choices were made.
+The `reasoning` field is not optional. It gets written as a context note on the thread so future decisions — by this worker or others — have access to why prior choices were made.
 
-## The Action Space
+## Platform Action Types
 
-**`implement`** — begin or continue coding work. Triggers the execution pipeline with a specific task description.
+Wade provides a standard action vocabulary that maps directly to [Action Primitives](05-action-primitives.md):
 
-**`ask_question`** — requirements are unclear or conflicting. Post a question (to GitHub issue, PR, or Slack thread) and wait for a response before proceeding. Moves thread state to `blocked`.
+**`implement`** — begin or continue coding work. Triggers the execution pipeline with a task description.
 
-**`comment`** — acknowledge, update, or respond without taking substantive action. Used for status updates, confirmations, or light coordination.
+**`ask_question`** — requirements are unclear or conflicting. Post a question (to GitHub issue, PR, or Slack thread) and wait for a response. Moves thread state to `blocked`.
 
-**`claim`** — self-assign an unowned work item and announce intent to work on it.
+**`comment`** — acknowledge, update, or respond without taking substantive action. Status updates, confirmations, light coordination.
 
-**`ignore`** — this event doesn't warrant action. The most common output. Wade should be conservative — most events are noise relative to any given thread.
+**`claim`** — self-assign an unowned work item and announce intent.
 
-**`escalate`** — something is wrong that Wade can't resolve. Flag it to a human with a clear explanation.
+**`ignore`** — this event doesn't warrant action. The most important action type. Workers should return this most of the time.
+
+**`escalate`** — something is wrong that the worker can't resolve. Flag it to a human with a clear explanation.
+
+Workers may define additional action types that map to custom behavior, as long as they ultimately resolve to one or more action primitives.
+
+## Worker Implementation
+
+How a worker implements the decision layer is up to the worker author. Common approaches:
+
+- **LLM-based**: pass the context packet to a language model with a system prompt that encodes the worker's role, judgment criteria, and voice. The model returns a structured action.
+- **Rule-based**: deterministic logic over the context packet for simple, well-defined workers.
+- **Hybrid**: rules for common cases, LLM for ambiguous ones.
+
+Wade does not require a specific AI model or prompt structure. Workers own their decision logic entirely.
+
+## What Wade Handles
+
+Regardless of how a worker implements its logic, Wade handles:
+
+- Delivering the context packet
+- Validating the action response shape
+- Routing the action to the appropriate primitive
+- Writing the `reasoning` as a thread context note
+- Logging every decision (including `ignore`) with the full context snapshot for auditability
 
 ## Conservatism
 
-The `ignore` case is as important as the action cases. An agent that acts on everything becomes noise. Wade should have a high bar for taking action, especially for:
+`ignore` is the most common correct answer. Workers that act on everything become noise. Worker authors should design their decision logic with a high bar for action, especially for:
 
-- Events on threads it doesn't own
+- Events on threads the worker doesn't own
 - Ambiguous events where the right action isn't clear
 - Events that arrive while the thread is in a waiting state
 
 When in doubt, `ask_question` is preferable to guessing.
 
-## Prompt Design
-
-The system prompt for the decision layer encodes:
-- Wade's role and behavioral guidelines
-- How to interpret each event type
-- When to ask vs. act
-- How to write the `reasoning` field
-- Wade's "voice" for any generated text (comments, questions)
-
-Prompts are versioned. Changes to decision behavior are tracked as prompt changes, not code changes.
-
 ## Auditability
 
-Every decision — including `ignore` decisions — is logged with the context packet and the full LLM response. This makes Wade's behavior inspectable and debuggable. When Wade does something unexpected, the audit log shows exactly what it saw and why it chose what it did.
+Every decision — including `ignore` — is logged with the context packet and the full worker response. This makes worker behavior inspectable and debuggable. When a worker does something unexpected, the audit log shows exactly what it saw and what it decided.

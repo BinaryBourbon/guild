@@ -2,46 +2,50 @@
 
 ## Purpose
 
-Social presence is what makes Wade feel like a participant rather than a system. It is Wade's identity across the platforms where engineering work happens — GitHub and Slack — and the set of conventions that govern how it communicates.
+Social presence is what makes a worker feel like a participant rather than a system. Wade provides the infrastructure for workers to have identities across GitHub and Slack — their own accounts, their own names, their own handles.
 
-This is not cosmetic. When Wade can be @mentioned, posts in the right threads, uses a consistent voice, and follows human social norms, it becomes genuinely easier to work with. When it can't, it creates friction even if its code output is good.
+Each worker gets its own presence. A team running three workers might have `@implementer-bot`, `@reviewer-bot`, and `@triage-bot` as distinct identities in Slack and GitHub, each with a defined role that engineers understand.
 
-## GitHub Identity
+This is not cosmetic. When a worker can be @mentioned, posts in the right threads, and communicates consistently, it becomes genuinely easier to work with. When it can't, it creates friction regardless of how good its output is.
 
-Wade operates as a **GitHub App** with a bot account. This means:
-- Commits are authored by `wade[bot]`
-- PRs are opened by `wade[bot]`
-- Comments appear under the bot account with the bot badge
-- Wade can be @mentioned in issues and PRs
-- Permissions are scoped to the repos it's been installed on
+## GitHub Identity (Per Worker)
 
-The GitHub App installation flow is how organizations grant Wade access to their repos.
+Each worker is backed by a **GitHub App installation** with its own bot account. This means:
+- Commits are authored by `[worker-name][bot]`
+- PRs are opened under the worker's account
+- Comments appear under the worker's account with the bot badge
+- The worker can be @mentioned in issues and PRs
+- Permissions are scoped to the repos the worker has been granted access to
 
-## Slack Identity
+Wade manages the GitHub App infrastructure. Worker authors configure the name, avatar, and repo scope.
 
-Wade operates as a **Slack App** with a bot user. This means:
-- Wade can be @mentioned in any channel it's in
-- Wade can post messages and reply in threads
-- DMs to Wade are supported
-- Wade appears in the member list like any other teammate
+## Slack Identity (Per Worker)
 
-Wade should be added to relevant engineering channels (sprint planning, PR reviews, incident response) — channels where the work it cares about is discussed.
+Each worker is backed by a **Slack App bot user**. This means:
+- The worker can be @mentioned in any channel it's in
+- The worker can post messages and reply in threads
+- DMs to the worker are supported
+- The worker appears in the member list like any other teammate
 
-## Voice and Communication Style
+Workers should be added to the channels where the work they care about is discussed. A worker focused on implementation doesn't need to be in `#marketing`.
 
-Wade has a consistent voice across all its communications. Key principles:
+## Voice
 
-**Be brief.** Wade is an agent in someone's workflow, not a chatbot. Messages should be concise. Status updates in a few words. Questions with enough context but no padding.
+Each worker author defines the communication style for their worker. Wade provides defaults and a set of conventions, but workers own their voice.
 
-**Be explicit about state.** When Wade picks up work, it says so. When it's blocked, it says why. When it finishes, it says what it did. Humans should never have to wonder what Wade is doing.
+Conventions that apply to all workers:
 
-**Ask, don't guess.** If requirements are ambiguous, Wade asks a specific question rather than making an assumption and proceeding. The question should be short and answerable.
+**Be brief.** Workers are agents in someone's workflow, not chatbots. Messages should be concise.
 
-**Surface decisions.** When Wade makes a non-obvious choice — a particular approach, a trade-off, a workaround — it briefly explains why in the PR description or a comment.
+**Be explicit about state.** When a worker picks up work, it says so. When it's blocked, it says why. When it finishes, it says what it did. Humans should never have to wonder what a worker is doing.
+
+**Ask, don't guess.** Ambiguous requirements get a specific question, not an assumption. The question should be short and answerable.
+
+**Surface decisions.** Non-obvious choices — a particular approach, a trade-off, a workaround — get a brief explanation in the PR or a comment.
 
 ## Communication Templates
 
-Wade uses prompt templates for recurring communication patterns:
+Wade provides default templates for recurring communication patterns. Worker authors can override these:
 
 - **Claiming work**: "Taking this — will open a PR when ready."
 - **Asking a question**: "Before I start: [specific question]? Waiting on this before proceeding."
@@ -49,14 +53,14 @@ Wade uses prompt templates for recurring communication patterns:
 - **Blocked**: "Blocked on: [reason]. [What I need from you, specifically]."
 - **Responding to review**: "Addressed [feedback summary] in [commit sha]. Let me know if you want it done differently."
 
-Templates are a starting point — the LLM fills in specifics, but the structure and tone are controlled.
-
 ## Handling @Mentions
 
-@Mentions are a first-class event type. When Wade is @mentioned:
+@Mentions are a first-class event type. When a worker is @mentioned:
 - The mention is ingested as an event into the [Event Stream](01-event-stream.md)
 - It is linked to the relevant thread if one exists
-- The [Decision Layer](04-decision-layer.md) treats it as high-priority — a human is directly addressing Wade
-- Wade responds in the same thread, typically within seconds
+- The [Decision Layer](04-decision-layer.md) treats it as high-priority — a human is directly addressing this worker
+- The worker responds in the same thread, typically within seconds
 
-Mentions can redirect Wade mid-stream: "hold off on this", "don't bother with tests for now", "actually do it differently." These are instructions that update thread context and may change state.
+Mentions can redirect a worker mid-stream: "hold off on this", "don't bother with tests for now", "do it differently." These update thread context and may change state.
+
+@Mentions addressed to *a different worker* are routed to that worker, not the current one.

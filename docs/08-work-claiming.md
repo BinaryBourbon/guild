@@ -2,63 +2,66 @@
 
 ## Purpose
 
-Work claiming is Wade's initiative mechanism — the behavior that makes it proactive rather than purely reactive. Instead of waiting for a specific trigger, Wade periodically surveys available work, evaluates what's in scope, and picks something up.
+Work claiming is the initiative mechanism — the behavior that makes workers proactive rather than purely reactive. Instead of waiting for a trigger, a worker periodically surveys available work, evaluates what's in scope, and picks something up.
 
-This is what makes the difference between "a bot that fires when triggered" and "a teammate who moves work forward."
+Wade provides the claiming loop. Workers define their own claiming policy.
 
 ## The Claiming Loop
 
-On a schedule (or triggered by specific signals like standup time, end of sprint, or a human invitation), Wade runs:
+Wade runs the following loop on behalf of each worker, on a configurable schedule:
 
-1. **Survey** — query available work matching its criteria across connected systems (Linear backlog, GitHub issues, unassigned tickets)
-2. **Evaluate** — for each candidate, assess: is this clearly in scope? Are requirements clear enough to act on? Is someone else already on it?
-3. **Select** — choose at most one item per cycle (avoid overcommitting)
+1. **Survey** — query available work across the worker's connected systems (Linear backlog, GitHub issues, etc.)
+2. **Evaluate** — for each candidate, the worker's policy determines: is this in scope? Are requirements clear enough? Is someone else on it?
+3. **Select** — at most one item per cycle
 4. **Claim** — self-assign, announce in the relevant channel, move thread to `claimed`
 5. **Begin** — initiate the execution loop
 
-## Claiming Criteria
+Steps 1, 3, 4, and 5 are handled by the platform. Step 2 is implemented by the worker.
 
-What Wade will pick up is defined by policy, not learned from inference. Starting configuration:
+## Worker-Defined Claiming Policy
 
-- **Labels**: only issues tagged with a designated label (e.g., `wade-ready`, `bot`)
-- **Repos**: only repos Wade has been explicitly granted access to
-- **Priority**: prefer highest-priority unlabeled/unassigned work
-- **Clarity**: skip issues with missing acceptance criteria or unresolved questions — ask for clarification instead
-- **Size**: prefer smaller, well-defined tasks over large ambiguous ones
+Workers define what they will and won't pick up. Policy is explicit configuration, not learned inference. A policy specifies:
 
-Policy is configurable per organization.
+- **Scope**: which repos, which issue trackers, which projects
+- **Filters**: labels, assignee state, issue type, priority thresholds
+- **Clarity requirement**: whether to skip issues that lack acceptance criteria
+- **Size preference**: whether to prefer small well-defined tasks over large ambiguous ones
+
+Workers may also implement a custom evaluation function — logic beyond simple filters — that receives a candidate work item and returns a yes/no with reasoning. This function runs inside the decision layer contract: context in, structured response out.
 
 ## Conflict Avoidance
 
-Wade should not claim work that:
-- Is already assigned to a human
-- Has recent activity suggesting a human is working on it
-- Wade has previously attempted and abandoned (unless explicitly re-invited)
+Wade enforces these constraints regardless of worker policy:
 
-When in doubt, don't claim — post a comment asking if the work is available.
+- Don't claim work already assigned to a human
+- Don't claim work another worker has already claimed
+- Don't claim work this worker has previously abandoned (unless explicitly re-invited)
+
+When a constraint is tripped, the candidate is skipped silently. If the worker wants to surface the conflict, it can do so via a `comment` action.
 
 ## Announcing Intent
 
-When Wade claims work, it announces it in the place where humans are watching — the Linear issue, the GitHub issue, and/or the relevant Slack channel:
+When a worker claims work, it announces in the relevant thread:
 
 > "Taking this — will open a PR when ready."
 
-This gives humans a chance to intervene ("actually hold on" → Wade stands down) and creates visibility into what Wade is working on at any given time.
+This gives humans a chance to intervene before work begins. If a human responds negatively within a short window, the worker stands down before executing.
 
 ## Standing Down
 
-Wade should yield immediately when:
+A worker yields immediately when:
 - A human explicitly asks it to stop
 - A human self-assigns the same work
 - The requirements change significantly mid-execution
 
-Standing down is not failure — it's correct behavior. Wade logs the reason and moves the thread to `abandoned` with a note explaining what happened and where it left things.
+Standing down is correct behavior, not failure. The worker logs the reason, moves the thread to `abandoned`, and notes where it left things so a human or another worker can continue.
 
 ## Pace and Limits
 
-Wade should not be running full-throttle at all times. Sensible defaults:
-- Claim at most one item per claiming cycle
-- Don't start new work while existing work is in `executing` or `pr_open` state (one thing at a time, initially)
-- Slow down claiming frequency if recent executions have had high failure rates
+Wade enforces sensible defaults that worker authors can adjust:
 
-These limits exist to keep Wade's output quality high and prevent it from becoming a source of noise.
+- Claim at most one item per cycle
+- Don't start new work while existing work is in `executing` or `pr_open` state
+- Back off claiming frequency if recent executions have a high failure rate
+
+These defaults exist to keep output quality high and prevent any single worker from flooding a repo with activity.

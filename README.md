@@ -1,14 +1,20 @@
 # Wade
 
-Wade is an autonomous agent that participates in the software development lifecycle.
+Wade is a platform for building autonomous workers that participate in the software development lifecycle.
 
 ## The Premise
 
 Most AI coding tools today are **trigger systems** — an event arrives, a job runs, it's done. The bot has no memory of yesterday, no awareness of the related PR that's failing, no way to respond when you ask it to hold off in Slack.
 
-Wade is built around a different premise: an AI that is a **participant**. It has persistent awareness of what's happening across the engineering org, exercises judgment about when and how to act, and communicates through the same channels humans use — GitHub, Slack, PR comments.
+Wade is built around a different premise: software development as something that autonomous **workers** can genuinely participate in. Workers that have persistent awareness of what's happening, exercise judgment about when and how to act, and communicate through the same channels humans use — GitHub, Slack, PR comments.
 
-The goal is not to automate individual tasks but to have something that can autonomously move work forward across its full lifecycle: picking up an issue, asking clarifying questions, writing code, opening a PR, responding to review, and shipping.
+Wade provides the infrastructure. You bring the workers.
+
+## Workers
+
+A worker is a user-defined autonomous agent that runs on the Wade platform. Teams typically run several workers with different roles — one that triages incoming issues, one that implements `bot-ready` tickets, one that responds to review feedback, one that watches CI failures. They share platform infrastructure but have independent identities, decision logic, and scopes.
+
+Wade does not prescribe what a worker does or how it reasons. It provides the plumbing — events, memory, context, actions, state — and workers define their own behavior on top of it.
 
 ## Architecture
 
@@ -19,18 +25,18 @@ Wade is built on eight components:
 | 1 | [Normalized Event Stream](docs/01-event-stream.md) | Unified envelope for events from all sources |
 | 2 | [Thread Model](docs/02-thread-model.md) | Connects related events into coherent units of work |
 | 3 | [Context Assembly](docs/03-context-assembly.md) | Builds the full picture before any decision is made |
-| 4 | [Decision Layer](docs/04-decision-layer.md) | LLM-powered reasoning over assembled context |
-| 5 | [Action Primitives](docs/05-action-primitives.md) | The concrete things Wade can do in the world |
-| 6 | [State Machine](docs/06-state-machine.md) | Tracks where Wade is with each piece of work |
-| 7 | [Social Presence](docs/07-social-presence.md) | Wade's identity across GitHub and Slack |
-| 8 | [Work Claiming](docs/08-work-claiming.md) | Proactive initiative — picking up work unprompted |
+| 4 | [Decision Layer](docs/04-decision-layer.md) | Interface workers implement to receive context and return actions |
+| 5 | [Action Primitives](docs/05-action-primitives.md) | The concrete things workers can do in the world |
+| 6 | [State Machine](docs/06-state-machine.md) | Tracks where a worker is with each piece of work |
+| 7 | [Social Presence](docs/07-social-presence.md) | Per-worker identity across GitHub and Slack |
+| 8 | [Work Claiming](docs/08-work-claiming.md) | Proactive initiative — workers picking up work unprompted |
 
 ## What Makes This Different From a Trigger System
 
-Three things separate an autonomous participant from a bot that fires and forgets:
+Three things separate autonomous workers from bots that fire and forget:
 
-**Memory across events.** A PR opened, a review requested, a Slack message asking for an update, a merge — these are all the same thread of work. Wade connects them over time so every decision is informed by what came before.
+**Memory across events.** A PR opened, a review requested, a Slack message asking for an update, a merge — these are all the same thread of work. Wade connects them over time so every decision a worker makes is informed by what came before.
 
-**Initiative, not just reaction.** Wade can browse available work, decide something is in scope, claim it, and start — without being explicitly triggered.
+**Initiative, not just reaction.** Workers can browse available work, decide something is in scope, claim it, and start — without being explicitly triggered.
 
-**Social presence.** Wade communicates through the same channels humans do. It announces what it's picking up, asks questions when requirements are unclear, and follows up. It feels like a team member because it behaves like one.
+**Social presence.** Workers communicate through the same channels humans do. They announce what they're picking up, ask questions when requirements are unclear, and follow up. They feel like team members because they behave like them.
