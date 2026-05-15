@@ -8,7 +8,7 @@ Most AI coding tools today are **trigger systems** — an event arrives, a job r
 
 Guild is built around a different premise: software development as something that autonomous **workers** can genuinely participate in. Workers that have persistent awareness of what's happening, exercise judgment about when and how to act, and communicate through the same channels humans use — GitHub, Slack, PR comments.
 
-Guild provides the infrastructure. You bring the workers.
+Define your workers. Guild handles the rest.
 
 ## Workers
 
