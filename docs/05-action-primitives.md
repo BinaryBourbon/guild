@@ -23,6 +23,23 @@ Update an existing PR description — typically to add context or respond to rev
 **`push_to_branch(repo, branch, files, message)`**
 Push additional commits to an existing branch. Used when addressing review feedback.
 
+## Planning Actions
+
+**`create_issue(tracker, project, title, body, labels, assignee)`**
+Create a new issue in Linear or GitHub. Used by PM workers to capture work, decompose epics, or surface problems discovered during implementation.
+
+**`create_sub_issue(tracker, parent_id, title, body, labels)`**
+Create a child issue linked to a parent. Used when breaking a larger work item into smaller tasks. Each sub-issue becomes its own thread in Guild.
+
+**`update_issue(tracker, issue_id, fields)`**
+Edit the title, description, labels, priority, or assignee of an existing issue. Used for triage, re-prioritization, or adding context.
+
+**`close_issue(tracker, issue_id, reason)`**
+Close an issue with an explanatory comment. Used when work is complete, a duplicate is found, or the issue is no longer relevant.
+
+**`add_to_project(tracker, issue_id, project_id)`**
+Add an issue to a milestone, sprint, or project board. Used by PM workers organizing work into planned cycles.
+
 ## Communication Actions
 
 **`comment_on_issue(repo, issue_number, body)`**

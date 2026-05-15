@@ -27,6 +27,8 @@ Guild provides a standard action vocabulary that maps directly to [Action Primit
 
 **`implement`** — begin or continue coding work. Triggers the execution pipeline with a task description.
 
+**`plan`** — decompose a work item into smaller issues. Used by PM-style workers to break epics or large tasks into actionable pieces. Creates one or more issues in the configured tracker and optionally links them to the parent. Does not begin implementation.
+
 **`ask_question`** — requirements are unclear or conflicting. Post a question (to GitHub issue, PR, or Slack thread) and wait for a response. Moves thread state to `blocked`.
 
 **`comment`** — acknowledge, update, or respond without taking substantive action. Status updates, confirmations, light coordination.
