@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Wade receives events from multiple external systems — GitHub, Linear, Slack, CI pipelines. Each has a different schema, delivery mechanism, and reliability guarantee. The event stream's job is to normalize all of this into a single, durable, queryable feed before any agent logic touches it.
+Guild receives events from multiple external systems — GitHub, Linear, Slack, CI pipelines. Each has a different schema, delivery mechanism, and reliability guarantee. The event stream's job is to normalize all of this into a single, durable, queryable feed before any worker logic touches it.
 
 ## Event Envelope
 
@@ -38,10 +38,10 @@ The `thread_id` field is the critical link to the [Thread Model](02-thread-model
 ### Slack
 - Delivered via Slack Events API
 - Events: `app_mention`, `message.channels` (in monitored channels), DMs
-- @mention events are particularly important — they represent humans directing Wade mid-stream
+- @mention events are particularly important — they represent humans directing workers mid-stream
 
 ### CI / Execution Callbacks
-- Wade dispatches work to CI runners; runners call back with status
+- Guild dispatches work to CI runners; runners call back with status
 - Events: execution started, execution completed, execution failed
 - These close the loop on the [State Machine](06-state-machine.md)
 

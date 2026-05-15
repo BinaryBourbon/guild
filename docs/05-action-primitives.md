@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Action primitives are the concrete things Wade can do in the world. They are typed, tested functions with known inputs, outputs, and failure modes. The [Decision Layer](04-decision-layer.md) calls them; they do not contain any reasoning logic.
+Action primitives are the concrete things workers can do in the world. They are typed, tested functions with known inputs, outputs, and failure modes. The [Decision Layer](04-decision-layer.md) calls them; they do not contain any reasoning logic.
 
 Keeping primitives simple and reliable is important. A primitive should do exactly one thing and do it predictably.
 
@@ -40,7 +40,7 @@ Post a new message to a Slack channel. Used sparingly — for announcements or w
 ## Work Management Actions
 
 **`assign_to_self(issue_id, source)`**
-Assign a Linear or GitHub issue to Wade's identity. Used when claiming work.
+Assign a Linear or GitHub issue to the worker's identity. Used when claiming work.
 
 **`update_issue_status(issue_id, source, status)`**
 Update the status of an issue (e.g., "In Progress", "In Review").
@@ -66,4 +66,4 @@ Primitives throw typed errors. The action executor catches these and either:
 - Records failure and moves thread to `blocked` state (permanent failures: permission denied, resource not found)
 - Escalates to a human (unexpected failures)
 
-Primitives do not silently swallow errors. A failed action that isn't surfaced leads to Wade incorrectly believing it completed work it didn't.
+Primitives do not silently swallow errors. A failed action that isn't surfaced leads the worker to incorrectly believe it completed work it didn't.
