@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Guild receives events from multiple external systems — GitHub, Linear, Slack, CI pipelines. Each has a different schema, delivery mechanism, and reliability guarantee. The event stream's job is to normalize all of this into a single, durable, queryable feed before any worker logic touches it.
+Guild receives events from multiple external systems — GitHub, Linear, Slack, Discord, CI pipelines. Each has a different schema, delivery mechanism, and reliability guarantee. The event stream's job is to normalize all of this into a single, durable, queryable feed before any worker logic touches it.
 
 ## Event Envelope
 
@@ -11,7 +11,7 @@ Every event, regardless of source, gets normalized into a common envelope:
 ```
 {
   id:         string          // globally unique event ID
-  source:     "github" | "linear" | "slack" | "ci"
+  source:     "github" | "linear" | "slack" | "discord" | "ci"
   type:       string          // e.g. "issue.labeled", "message.mentioned", "pr.opened"
   timestamp:  datetime
   actor:      { id, name, handle, source_id }
@@ -39,6 +39,11 @@ The `thread_id` field is the critical link to the [Thread Model](02-thread-model
 - Delivered via Slack Events API
 - Events: `app_mention`, `message.channels` (in monitored channels), DMs
 - @mention events are particularly important — they represent humans directing workers mid-stream
+
+### Discord
+- Delivered via Discord Gateway (WebSocket) or webhooks
+- Events: `message.created`, `message.mention`, thread activity in monitored channels
+- @mention events serve the same role as Slack mentions — direct human-to-worker communication
 
 ### CI / Execution Callbacks
 - Guild dispatches work to CI runners; runners call back with status
