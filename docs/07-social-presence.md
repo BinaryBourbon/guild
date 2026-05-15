@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Social presence is what makes a worker feel like a participant rather than a system. Wade provides the infrastructure for workers to have identities across GitHub and Slack — their own accounts, their own names, their own handles.
+Social presence is what makes a worker feel like a participant rather than a system. Guild provides the infrastructure for workers to have identities across GitHub and Slack — their own accounts, their own names, their own handles.
 
 Each worker gets its own presence. A team running three workers might have `@implementer-bot`, `@reviewer-bot`, and `@triage-bot` as distinct identities in Slack and GitHub, each with a defined role that engineers understand.
 
@@ -17,7 +17,7 @@ Each worker is backed by a **GitHub App installation** with its own bot account.
 - The worker can be @mentioned in issues and PRs
 - Permissions are scoped to the repos the worker has been granted access to
 
-Wade manages the GitHub App infrastructure. Worker authors configure the name, avatar, and repo scope.
+Guild manages the GitHub App infrastructure. Worker authors configure the name, avatar, and repo scope.
 
 ## Slack Identity (Per Worker)
 
@@ -31,7 +31,7 @@ Workers should be added to the channels where the work they care about is discus
 
 ## Voice
 
-Each worker author defines the communication style for their worker. Wade provides defaults and a set of conventions, but workers own their voice.
+Each worker author defines the communication style for their worker. Guild provides defaults and a set of conventions, but workers own their voice.
 
 Conventions that apply to all workers:
 
@@ -45,7 +45,7 @@ Conventions that apply to all workers:
 
 ## Communication Templates
 
-Wade provides default templates for recurring communication patterns. Worker authors can override these:
+Guild provides default templates for recurring communication patterns. Worker authors can override these:
 
 - **Claiming work**: "Taking this — will open a PR when ready."
 - **Asking a question**: "Before I start: [specific question]? Waiting on this before proceeding."

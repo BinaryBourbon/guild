@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The decision layer is the interface between Wade's platform infrastructure and a worker's logic. Wade assembles context and delivers it; the worker decides what to do with it.
+The decision layer is the interface between Guild's platform infrastructure and a worker's logic. Guild assembles context and delivers it; the worker decides what to do with it.
 
-Wade defines the contract — what comes in, what must come out. Workers implement the logic — what to reason about, how to reason, and why.
+Guild defines the contract — what comes in, what must come out. Workers implement the logic — what to reason about, how to reason, and why.
 
 ## The Contract
 
@@ -23,7 +23,7 @@ The `reasoning` field is not optional. It gets written as a context note on the 
 
 ## Platform Action Types
 
-Wade provides a standard action vocabulary that maps directly to [Action Primitives](05-action-primitives.md):
+Guild provides a standard action vocabulary that maps directly to [Action Primitives](05-action-primitives.md):
 
 **`implement`** — begin or continue coding work. Triggers the execution pipeline with a task description.
 
@@ -47,11 +47,11 @@ How a worker implements the decision layer is up to the worker author. Common ap
 - **Rule-based**: deterministic logic over the context packet for simple, well-defined workers.
 - **Hybrid**: rules for common cases, LLM for ambiguous ones.
 
-Wade does not require a specific AI model or prompt structure. Workers own their decision logic entirely.
+Guild does not require a specific AI model or prompt structure. Workers own their decision logic entirely.
 
-## What Wade Handles
+## What Guild Handles
 
-Regardless of how a worker implements its logic, Wade handles:
+Regardless of how a worker implements its logic, Guild handles:
 
 - Delivering the context packet
 - Validating the action response shape

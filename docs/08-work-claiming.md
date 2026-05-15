@@ -4,11 +4,11 @@
 
 Work claiming is the initiative mechanism — the behavior that makes workers proactive rather than purely reactive. Instead of waiting for a trigger, a worker periodically surveys available work, evaluates what's in scope, and picks something up.
 
-Wade provides the claiming loop. Workers define their own claiming policy.
+Guild provides the claiming loop. Workers define their own claiming policy.
 
 ## The Claiming Loop
 
-Wade runs the following loop on behalf of each worker, on a configurable schedule:
+Guild runs the following loop on behalf of each worker, on a configurable schedule:
 
 1. **Survey** — query available work across the worker's connected systems (Linear backlog, GitHub issues, etc.)
 2. **Evaluate** — for each candidate, the worker's policy determines: is this in scope? Are requirements clear enough? Is someone else on it?
@@ -31,7 +31,7 @@ Workers may also implement a custom evaluation function — logic beyond simple 
 
 ## Conflict Avoidance
 
-Wade enforces these constraints regardless of worker policy:
+Guild enforces these constraints regardless of worker policy:
 
 - Don't claim work already assigned to a human
 - Don't claim work another worker has already claimed
@@ -58,7 +58,7 @@ Standing down is correct behavior, not failure. The worker logs the reason, move
 
 ## Pace and Limits
 
-Wade enforces sensible defaults that worker authors can adjust:
+Guild enforces sensible defaults that worker authors can adjust:
 
 - Claim at most one item per cycle
 - Don't start new work while existing work is in `executing` or `pr_open` state
