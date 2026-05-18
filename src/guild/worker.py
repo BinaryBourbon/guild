@@ -23,40 +23,46 @@ from guild.context import assemble_context
 from guild.decision import decide
 from guild.github_client import GitHubClient
 from guild.primitives import run_primitive
-from guild.primitives.code import (
-    create_branch,
-    commit_and_push,
-    open_pull_request,
-    push_to_branch,
-)
-from guild.primitives.communication import comment_on_issue, comment_on_pr
-from guild.primitives.meta import (
-    update_thread_state,
-    write_thread_note,
-    log_decision,
-)
-from guild.primitives.work import assign_to_self, add_label
 from guild.triggers import check_planned_done
 from guild import crud
 
 logger = logging.getLogger(__name__)
 
-# Map action names to primitive functions
-# Each primitive takes keyword args matching its signature;
-# session/github are injected by run_event before dispatch.
-_ACTION_MAP: dict[str, Any] = {
-    "create_branch": create_branch,
-    "commit_and_push": commit_and_push,
-    "open_pull_request": open_pull_request,
-    "push_to_branch": push_to_branch,
-    "comment_on_issue": comment_on_issue,
-    "comment_on_pr": comment_on_pr,
-    "update_thread_state": update_thread_state,
-    "write_thread_note": write_thread_note,
-    "log_decision": log_decision,
-    "assign_to_self": assign_to_self,
-    "add_label": add_label,
-}
+
+def _get_primitive_fn(action: str):
+    """Return the callable for *action*, or None if unknown."""
+    # Import here to avoid circular deps and keep mapping close to usage
+    from guild.primitives.code import (
+        create_branch, commit_and_push, open_pull_request, push_to_branch,
+    )
+    from guild.primitives.communication import comment_on_issue, comment_on_pr
+    from guild.primitives.meta import update_thread_state, write_thread_note, log_decision
+    from guild.primitives.work import assign_to_self, add_label
+
+    action_map = {
+        "create_branch": create_branch,
+        "commit_and_push": commit_and_push,
+        "open_pull_request": open_pull_request,
+        "push_to_branch": push_to_branch,
+        "comment_on_issue": comment_on_issue,
+        "comment_on_pr": comment_on_pr,
+        "update_thread_state": update_thread_state,
+        "write_thread_note": write_thread_note,
+        "log_decision": log_decision,
+        "assign_to_self": assign_to_self,
+        "add_label": add_label,
+    }
+    return action_map.get(action)
+
+
+_GITHUB_ACTIONS = frozenset({
+    "create_branch", "commit_and_push", "open_pull_request", "push_to_branch",
+    "comment_on_issue", "comment_on_pr", "assign_to_self", "add_label",
+})
+
+_SESSION_ACTIONS = frozenset({
+    "update_thread_state", "write_thread_note", "log_decision",
+})
 
 
 def run_event(
@@ -94,7 +100,6 @@ def run_event(
             return
 
         if action == "claim_thread":
-            # Transition noticed → claimed
             from guild.state_machine import transition
             transition(thread_id, "claimed", session)
             session.flush()
@@ -102,21 +107,19 @@ def run_event(
             logger.info("Thread %s claimed", thread_id)
             return
 
-        primitive_fn = _ACTION_MAP.get(action)
+        primitive_fn = _get_primitive_fn(action)
         if primitive_fn is None:
             logger.error("Unknown action %r for thread %s; skipping", action, thread_id)
             session.rollback()
             return
 
-        # Inject session and github_client into params where needed
+        # Build full params: inject session for meta actions, client for GitHub actions
         full_params = dict(params)
-        if action in {"update_thread_state", "write_thread_note", "log_decision"}:
+        if action in _SESSION_ACTIONS:
             full_params.setdefault("session", session)
-        if action in {"assign_to_self", "add_label"}:
-            full_params.setdefault("github", github_client)
-        if action in {"create_branch", "commit_and_push", "open_pull_request",
-                      "push_to_branch", "comment_on_issue", "comment_on_pr"}:
-            full_params.setdefault("github", github_client)
+        if action in _GITHUB_ACTIONS:
+            # Primitives use 'client' as their first positional param name
+            full_params.setdefault("client", github_client)
 
         result = run_primitive(primitive_fn, full_params)
 
