@@ -5,7 +5,7 @@ from guild.primitives import ActionResult, PrimitiveError, run_primitive
 
 
 def _always_succeeds(**kwargs) -> ActionResult:
-    return ActionResult(success=True, data=kwargs)
+    return ActionResult(success=True, artifact=kwargs)
 
 
 def _always_transient(**kwargs) -> ActionResult:  # noqa: ARG001
@@ -24,7 +24,7 @@ def _succeeds_on_attempt(n: int):
         calls["count"] += 1
         if calls["count"] < n:
             raise PrimitiveError("transient", f"attempt {calls['count']}")
-        return ActionResult(success=True, data={"attempt": calls["count"]})
+        return ActionResult(success=True, artifact={"attempt": calls["count"]})
 
     return fn
 
@@ -32,7 +32,7 @@ def _succeeds_on_attempt(n: int):
 def test_success_no_retries():
     result = run_primitive(_always_succeeds, {"x": 1}, _sleep=lambda _: None)
     assert result.success
-    assert result.data == {"x": 1}
+    assert result.artifact == {"x": 1}
 
 
 def test_permanent_error_returns_immediately():
@@ -65,7 +65,7 @@ def test_transient_succeeds_on_second_attempt():
     sleeps = []
     result = run_primitive(fn, {}, max_retries=3, _sleep=sleeps.append)
     assert result.success
-    assert result.data["attempt"] == 2
+    assert result.artifact["attempt"] == 2
     assert len(sleeps) == 1
 
 

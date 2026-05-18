@@ -5,6 +5,7 @@ import httpx
 
 from guild.github_client import GitHubClient
 from guild.primitives import ActionResult, PrimitiveError
+from guild.primitives._utils import _http_error_kind
 
 
 def assign_to_self(
@@ -20,10 +21,9 @@ def assign_to_self(
             f"/repos/{owner}/{repo}/issues/{issue_number}",
             json={"assignees": [login]},
         )
-        return ActionResult(success=True, data={"assignee": login})
+        return ActionResult(success=True, artifact={"assignee": login})
     except httpx.HTTPStatusError as exc:
-        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
-        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
+        return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
@@ -41,10 +41,9 @@ def add_label(
             f"/repos/{owner}/{repo}/issues/{issue_number}/labels",
             json={"labels": [label]},
         )
-        return ActionResult(success=True, data={"label": label})
+        return ActionResult(success=True, artifact={"label": label})
     except httpx.HTTPStatusError as exc:
-        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
-        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
+        return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
@@ -62,9 +61,8 @@ def update_issue_status(
             f"/repos/{owner}/{repo}/issues/{issue_number}",
             json={"state": state},
         )
-        return ActionResult(success=True, data={"state": state})
+        return ActionResult(success=True, artifact={"state": state})
     except httpx.HTTPStatusError as exc:
-        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
-        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
+        return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
