@@ -4,12 +4,11 @@ The captain-picard orchestrator reads this every cycle and writes the conversati
 
 ## Now
 
-- **g2-slice-2-state-machine** — general-purpose-engineer (branch: g2-slice-2-state-machine, see PR #4)
+- **g2-slice-3-redo** — general-purpose-engineer (branch: g2-slice-3-redo, see plan/g2-slice-3-redo)
 
 ## Next
 
-- **g2-slice-3-action-primitives** — GitHubClient (auth seam, item #7) + action primitives + run_primitive retry fix (item #1)
-- **g2-slice-4-decision** — context assembly + decision layer (decide() via tool_use)
+- **g2-slice-4-decision** — context assembly + decision layer (decide() via tool_use); dispatch after slice-3-redo merges green
 - **g2-slice-5-e2e** — PollingEventSource + claiming loop + asyncio entry point (items #4, #5, #8, #9)
 
 ## Gated
