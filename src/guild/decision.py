@@ -15,6 +15,7 @@ The decide() function is pure from the caller's perspective:
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -22,6 +23,8 @@ import anthropic
 from sqlalchemy.orm import Session
 
 from guild.primitives.meta import log_decision
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -157,7 +160,7 @@ def validate_decision(action_input: dict) -> tuple[bool, str]:
         return False, f"unknown action {action!r}"
 
     reasoning = action_input.get("reasoning")
-    if not reasoning or not str(reasoning).strip():
+    if not reasoning or len(str(reasoning).strip()) < 10:
         return False, "'reasoning' is required and must be non-empty"
 
     params = action_input.get("params")
@@ -277,12 +280,15 @@ def decide(
 
     except Exception as exc:  # noqa: BLE001
         reason = str(exc) if str(exc) else repr(exc)
-        log_decision(
-            session, thread_id,
-            reasoning=f"invalid model output: {reason}",
-            action="escalate",
-            params={},
-        )
+        try:
+            log_decision(
+                session, thread_id,
+                reasoning=f"invalid model output: {reason}",
+                action="escalate",
+                params={},
+            )
+        except Exception as log_exc:  # noqa: BLE001
+            logger.error("fallback log_decision failed: %s", log_exc)
         return "escalate", {}
 
 

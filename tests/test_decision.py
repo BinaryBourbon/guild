@@ -294,3 +294,35 @@ def test_decide_tool_reasoning_has_min_length():
     """Fix #6: reasoning property must have minLength: 10."""
     reasoning_schema = DECIDE_TOOL["input_schema"]["properties"]["reasoning"]
     assert reasoning_schema.get("minLength") == 10
+
+
+# ---------------------------------------------------------------------------
+# Blocking fix 1: validate_decision enforces minLength: 10 on reasoning
+# ---------------------------------------------------------------------------
+
+def test_validate_decision_rejects_short_reasoning():
+    """reasoning < 10 chars must be rejected even if non-empty."""
+    ok, reason = validate_decision({"action": "wait", "reasoning": "ok", "params": {}})
+    assert not ok
+    assert "reasoning" in reason
+
+
+# ---------------------------------------------------------------------------
+# Blocking fix 2: fallback log_decision in except block never propagates
+# ---------------------------------------------------------------------------
+
+def test_decide_never_raises_when_log_decision_raises(session):
+    """If log_decision raises (e.g. DB down), decide() must still return ('escalate', {})."""
+    thread = _make_thread(session)
+    ctx = _make_context(thread.id)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = RuntimeError("API down")
+
+    with patch("guild.decision.log_decision", side_effect=Exception("DB down")):
+        action, params = decide(
+            ctx, anthropic_client=mock_client, session=session, thread_id=thread.id
+        )
+
+    assert action == "escalate"
+    assert params == {}
