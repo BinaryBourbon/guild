@@ -63,8 +63,9 @@ class PollingEventSource(EventSource):
     has that ID, the INSERT is silently ignored — no double-writes.
 
     Handler contract: on_event handler is only called when a genuinely new
-    event is inserted (rowcount > 0). Re-polling unchanged GitHub state does
-    not trigger the handler — and therefore does not call the Anthropic API.
+    event is inserted (RETURNING clause returns a row). Re-polling unchanged
+    GitHub state does not trigger the handler — and therefore does not call
+    the Anthropic API.
     """
 
     def __init__(
@@ -146,25 +147,32 @@ class PollingEventSource(EventSource):
             "number": issue_data.get("number"),
         }
 
+        inserted = False
         try:
             with self._session_factory() as session:
-                stmt = pg_insert(ThreadEvent).values(
-                    id=event_id,
-                    thread_id=thread["id"],
-                    source="github",
-                    type="issue.polled",
-                    actor_id=None,
-                    actor_name=None,
-                    timestamp=now,
-                    payload=payload,
-                ).on_conflict_do_nothing(index_elements=["id"])
+                stmt = (
+                    pg_insert(ThreadEvent)
+                    .values(
+                        id=event_id,
+                        thread_id=thread["id"],
+                        source="github",
+                        type="issue.polled",
+                        actor_id=None,
+                        actor_name=None,
+                        timestamp=now,
+                        payload=payload,
+                    )
+                    .on_conflict_do_nothing(index_elements=["id"])
+                    .returning(ThreadEvent.id)
+                )
                 result = session.execute(stmt)
+                inserted = result.fetchone() is not None
                 session.commit()
         except Exception:
             logger.exception("Failed to write event for thread %s", thread["id"])
             return
 
-        if result.rowcount > 0 and self._handler is not None:
+        if inserted and self._handler is not None:
             event_dict = {
                 "id": event_id,
                 "thread_id": thread["id"],
