@@ -34,7 +34,7 @@ def write_thread_note(
         )
     try:
         note = crud.write_note(thread_id, "worker", note_type, body, session)
-        return ActionResult(success=True, data={"note_id": note.id})
+        return ActionResult(success=True, artifact={"note_id": note.id})
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
@@ -52,7 +52,7 @@ def update_thread_state(
     try:
         thread = state_machine.transition(thread_id, to_state, session)
         session.flush()
-        return ActionResult(success=True, data={"state": thread.state})
+        return ActionResult(success=True, artifact={"state": thread.state})
     except state_machine.IllegalTransition as exc:
         return ActionResult(success=False, error=PrimitiveError("permanent", str(exc)))
     except ValueError as exc:
