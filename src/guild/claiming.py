@@ -6,6 +6,8 @@ Conflict-avoidance filters (all required, per item #5):
    for this anchor — another worker is on it
 3. Skip if this worker previously abandoned the thread (thread.state == 'abandoned'
    AND thread.owner_id == config.worker_id) — item #5
+4. Skip if thread is in a terminal state other than the re-claim path — avoids
+   wasting Anthropic API calls on done/abandoned threads (slice 5 review item #1)
 """
 from __future__ import annotations
 
@@ -114,6 +116,19 @@ class ClaimingLoop:
                     logger.debug(
                         "Issue #%s was previously abandoned by this worker; skipping",
                         issue["number"],
+                    )
+                    return
+
+                # Filter 4 (slice 5 review item #1): skip terminal-state threads that
+                # are not the re-claim path.  After filter 3, any 'abandoned' thread
+                # that reaches here is owned by a DIFFERENT worker — that is the
+                # legitimate re-claim path and must stay live.  All other terminal
+                # states (e.g. 'done') have no valid transition left; firing on_event
+                # would only waste an Anthropic API call and raise IllegalTransition.
+                if existing.state in TERMINAL_STATES and existing.state != "abandoned":
+                    logger.debug(
+                        "Issue #%s thread %s is in terminal state %r; skipping",
+                        issue["number"], existing.id, existing.state,
                     )
                     return
 
