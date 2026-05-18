@@ -52,7 +52,7 @@ def test_update_thread_state_success(session):
     thread = _make_thread(session, state="noticed")
     result = update_thread_state(session, thread.id, "claimed")
     assert result.success
-    assert result.data["state"] == "claimed"
+    assert result.artifact["state"] == "claimed"
     session.flush()
     assert thread.state == "claimed"
 
