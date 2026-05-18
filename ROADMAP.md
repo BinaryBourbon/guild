@@ -4,11 +4,11 @@ The captain-picard orchestrator reads this every cycle and writes the conversati
 
 ## Now
 
-_(empty — orchestrator fills this on dispatch, with `<slice> — <role> (conv <id>)` per entry.)_
+- **phase-0-framing** — customer-researcher (branch: phase-0-framing, see PR)
 
 ## Next
 
-- **phase-0-framing** — pick the first wedge. The eight component docs under [`docs/`](docs/) describe the full platform; the wedge is the subset that lets a Guild worker claim and ship a real issue in this repo. Produce a side-by-side framing of 2–3 candidate wedges (e.g. "thinnest possible end-to-end" vs "thread model + state first, claiming later" vs "event ingestion + action runner only, hardcode the rest"), each with: what's in scope, what gets stubbed, what's the first issue a worker could actually close. Decide direction at G0. Dispatch as `customer-researcher` — the "customer" here is the team writing Guild's own first worker.
+_(empty — phase-0-framing dispatched; G0 picks the wedge before anything else moves here)_
 
 ## Gated
 
