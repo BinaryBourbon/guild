@@ -1,23 +1,30 @@
+databases:
+  - name: guild-db
+    plan: free
+    databaseName: guild
+    user: guild
+
 services:
   - type: worker
     name: guild-worker
+    plan: starter
     runtime: python
     buildCommand: pip install -e .
-    startCommand: guild
+    startCommand: alembic upgrade head && guild
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: guild-db
+          property: connectionString
       - key: GUILD_WORKER_GITHUB_TOKEN
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: GUILD_WORKER_ID
-        sync: false
+        value: "guild-worker-mvp"
       - key: GUILD_REPO
-        sync: false
+        value: "BinaryBourbon/guild"
       - key: GUILD_POLL_INTERVAL_SECONDS
         value: "120"
       - key: GUILD_CLAIM_INTERVAL_SECONDS
         value: "300"
-      - key: PORT
-        value: "8000"
