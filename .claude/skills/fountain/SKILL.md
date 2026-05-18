@@ -1,47 +1,46 @@
 ---
 name: fountain
-description: Spawn and stream Fountain conversations from inside a sprite — use whenever the user asks you to "spin up an agent on Fountain", "delegate to another agent", "fan out", or any task large enough to parallelise across coding agents. Fountain provisions an isolated Sprite per conversation, runs the configured runtime in it, and streams output back over SSE. Reads `FOUNTAIN_BASE_URL`, `FOUNTAIN_TOKEN`, and `FOUNTAIN_CONVERSATION_ID` from the environment.
+description: Spawn and stream Fountain conversations from a workstation — use whenever the user asks you to "spin up an agent on Fountain", "delegate to another agent", "fan out", run captain-picard, or any task large enough to parallelise across coding agents. Fountain provisions an isolated Sprite per conversation, runs the configured runtime in it, and streams output back over SSE. Reads `FOUNTAIN_BASE_URL` and `FOUNTAIN_API_KEY` from the environment (typically a `.env` at the repo root).
 ---
 
-# Fountain — spawning conversations from inside a sprite
+# Fountain — spawning conversations from a workstation
 
-You are running inside a Sprite that Fountain provisioned. The Fountain API is
+You are on a developer workstation, not inside a Sprite. The Fountain API is
 reachable at `$FOUNTAIN_BASE_URL` (under **`/api`**) with bearer
-`$FOUNTAIN_TOKEN`. From here you can spawn *more* Fountain conversations —
-each runs in its own fresh Sprite.
+`$FOUNTAIN_API_KEY`. Every conversation you spawn provisions a fresh Sprite
+on Fountain's side.
 
 > **Common mistake**: hitting `$FOUNTAIN_BASE_URL/conversations` returns 302
 > (the bare path is the LiveView UI). The right URL is
 > `$FOUNTAIN_BASE_URL/api/conversations`.
 
-## Finding cloned repositories
+## Loading credentials
 
-If the environment was configured with repositories, they are cloned into the
-sprite **before** the setup script runs. **Look for cloned repos under
-`/workspace/`** — for example, a repo cloned with `mount_path:
-"/workspace/my-repo"` will be at `/workspace/my-repo` inside the sprite.
+Creds live in `.env` at the repo root. Source them at the top of any shell
+snippet:
 
 ```bash
-# List all cloned repos:
-ls /workspace/
-
-# Navigate to a specific repo:
-cd /workspace/my-repo
+set -a; . ./.env; set +a
 ```
 
-When writing prompts for spawned agents that need to work with source code,
-tell them to look in `/workspace/<repo-name>` — that is the conventional
-location. If you are unsure of the repo name, `ls /workspace/` will show
-what is available.
+This exports `FOUNTAIN_BASE_URL` and `FOUNTAIN_API_KEY` into the current
+shell. `.env` must be gitignored — check before staging anything new.
+
+There is **no** `FOUNTAIN_CONVERSATION_ID` on a workstation. That variable
+only exists inside a Sprite, where it marks the parent conversation for
+provenance. Workstation spawns are root conversations; just omit the parent
+header.
 
 ## The two patterns you'll use
 
 ### A. Fan out N agents and collect their answers
 
 ```bash
+set -a; . ./.env; set +a
+
 # 1. Pick the agent (by name).
 AGENT_ID=$(curl -s "$FOUNTAIN_BASE_URL/api/agents" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
   | jq -r '.data[] | select(.name == "echo-bot") | .id')
 
 # 2. Spawn N conversations IN PARALLEL with xargs. Output is conv ids on stdout.
@@ -50,10 +49,9 @@ ids=$(printf '%s\n' "${prompts[@]}" | xargs -n1 -P8 -I{} sh -c '
   curl -s -X POST "$1/api/conversations" \
     -H "Authorization: Bearer $2" \
     -H "Content-Type: application/json" \
-    -H "X-Fountain-Parent-Conversation-Id: $FOUNTAIN_CONVERSATION_ID" \
     -d "$(jq -n --arg a "$3" --arg p "$4" "{agent_id:\$a, prompt:\$p}")" \
   | jq -r .data.id
-' _ "$FOUNTAIN_BASE_URL" "$FOUNTAIN_TOKEN" "$AGENT_ID" {})
+' _ "$FOUNTAIN_BASE_URL" "$FOUNTAIN_API_KEY" "$AGENT_ID" {})
 
 echo "$ids"   # one conv id per line
 
@@ -63,14 +61,14 @@ echo "$ids" | xargs -n1 -P10 -I{} sh -c '
     s=$(curl -s "$1/api/conversations/$3" -H "Authorization: Bearer $2" | jq -r .data.status)
     case "$s" in running|pending) sleep 2 ;; *) break ;; esac
   done
-' _ "$FOUNTAIN_BASE_URL" "$FOUNTAIN_TOKEN" {}
+' _ "$FOUNTAIN_BASE_URL" "$FOUNTAIN_API_KEY" {}
 
 # 4. Gather the final text from each (claude runtime).
 while IFS= read -r conv; do
   echo "=== $conv ==="
   curl -sN --max-time 5 \
     "$FOUNTAIN_BASE_URL/api/conversations/$conv/stream?streams=stdout&wait=false" \
-    -H "Authorization: Bearer $FOUNTAIN_TOKEN" \
+    -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
   | awk '/^data: /{sub(/^data: /,""); print}' \
   | jq -r '.data | fromjson? | select(.type=="result") | .result' \
   | tail -n1
@@ -79,39 +77,76 @@ done <<<"$ids"
 # 5. Terminate all spawned conversations now that you have what you need.
 echo "$ids" | xargs -n1 -P10 -I{} \
   curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations/{}/terminate" \
-    -H "Authorization: Bearer $FOUNTAIN_TOKEN"
+    -H "Authorization: Bearer $FOUNTAIN_API_KEY"
 ```
 
 ### B. Spawn one and block until it answers
 
 ```bash
+set -a; . ./.env; set +a
 AGENT_ID=...
 PROMPT=...
 
 CONV=$(curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
   -H "Content-Type: application/json" \
-  -H "X-Fountain-Parent-Conversation-Id: $FOUNTAIN_CONVERSATION_ID" \
   -d "$(jq -n --arg a "$AGENT_ID" --arg p "$PROMPT" '{agent_id:$a, prompt:$p}')" \
   | jq -r .data.id)
 
 while :; do
   s=$(curl -s "$FOUNTAIN_BASE_URL/api/conversations/$CONV" \
-    -H "Authorization: Bearer $FOUNTAIN_TOKEN" | jq -r .data.status)
+    -H "Authorization: Bearer $FOUNTAIN_API_KEY" | jq -r .data.status)
   case "$s" in running|pending) sleep 2 ;; *) break ;; esac
 done
 
 curl -sN --max-time 5 \
   "$FOUNTAIN_BASE_URL/api/conversations/$CONV/stream?streams=stdout&wait=false" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
 | awk '/^data: /{sub(/^data: /,""); print}' \
 | jq -r '.data | fromjson? | select(.type=="result") | .result' \
 | tail -n1
 
 # Terminate once you have the result — don't leave the sprite running.
 curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations/$CONV/terminate" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN"
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY"
 ```
+
+## Running captain-picard against this bus repo
+
+This repo is a captain-picard bus repo (see [`OPERATING_MODEL.md`](../../../OPERATING_MODEL.md)). Dispatch a cycle with:
+
+```bash
+set -a; . ./.env; set +a
+
+AGENT_ID=$(curl -s "$FOUNTAIN_BASE_URL/api/agents" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
+  | jq -r '.data[] | select(.name=="captain-picard") | .id')
+
+VAULT_ID=$(curl -s "$FOUNTAIN_BASE_URL/api/vaults" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
+  | jq -r '.data[] | select(.name=="binarybourbon") | .id')
+
+PROMPT='repo_url=https://github.com/BinaryBourbon/guild
+vault_name=binarybourbon
+operating_doc_path=OPERATING_MODEL.md
+
+begin phase 0 per ROADMAP.md.'
+
+CONV=$(curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "$(jq -n --arg a "$AGENT_ID" --arg v "$VAULT_ID" --arg p "$PROMPT" \
+        '{agent_id:$a, vault_id:$v, prompt:$p}')" \
+  | jq -r .data.id)
+
+echo "Conversation: $FOUNTAIN_BASE_URL/conversations/$CONV"
+```
+
+The `binarybourbon` vault layers a GitHub PAT scoped to push to
+`BinaryBourbon/*` on top of the agent's default env, so captain-picard can
+write briefs, ROADMAP edits, and ADRs back to this repo. Subsequent cycles
+swap the free-text tail (`begin phase 0 ...`) for whatever the next ask is
+(`continue conv <id>`, `dispatch <slice> per ROADMAP.md`, `resolve G0 — picked option B`, etc.).
 
 ## SSE wire format (so you don't have to discover it)
 
@@ -150,7 +185,7 @@ right filter:
 
 ```bash
 RT=$(curl -s "$FOUNTAIN_BASE_URL/api/conversations/$CONV" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN" | jq -r .data.runtime)
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" | jq -r .data.runtime)
 ```
 
 | runtime  | filter (the part **after** `.data \| fromjson?`)                       | text path        |
@@ -162,25 +197,24 @@ RT=$(curl -s "$FOUNTAIN_BASE_URL/api/conversations/$CONV" \
 
 ## Vaults — running as a different identity
 
-If you need a spawned conversation to run with credentials other than what the
-agent's environment provides (e.g. contribute to GitHub as a specific user), pass
-an optional `vault_id` when creating it. List vaults to find the one you want:
+A spawned conversation runs with the agent's default environment unless you
+pass a `vault_id` — then the vault's secrets layer on top, overriding on key
+collision. Almost every workstation spawn against this repo wants a vault,
+because the default env's `GITHUB_TOKEN` can't push to `BinaryBourbon/*`.
 
 ```bash
-curl -s "$FOUNTAIN_BASE_URL/api/vaults" -H "Authorization: Bearer $FOUNTAIN_TOKEN" \
+curl -s "$FOUNTAIN_BASE_URL/api/vaults" -H "Authorization: Bearer $FOUNTAIN_API_KEY" \
   | jq -r '.data[] | "\(.name)\t\(.id)"'
 
 # Spawn with a specific vault layered on top of the env's secrets:
 curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN" -H "Content-Type: application/json" \
-  -H "X-Fountain-Parent-Conversation-Id: $FOUNTAIN_CONVERSATION_ID" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" -H "Content-Type: application/json" \
   -d "$(jq -n --arg a "$AGENT_ID" --arg v "$VAULT_ID" --arg p "$PROMPT" \
         '{agent_id:$a, vault_id:$v, prompt:$p}')"
 ```
 
-Vault values override the environment's baseline on key collision. Most fan-outs
-don't need this — only reach for it when you specifically want different
-credentials per spawned conversation.
+For this repo, `binarybourbon` is the vault to use when running
+captain-picard or any specialist that pushes to GitHub.
 
 ## Multi-turn
 
@@ -188,7 +222,7 @@ Send a follow-up prompt to an existing conversation:
 
 ```bash
 curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations/$CONV/prompts" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY" -H "Content-Type: application/json" \
   -d '{"prompt":"Now compare that to the worker service."}'
 ```
 
@@ -204,12 +238,12 @@ soon as you have what you need** — don't leave agents idling.
 ```bash
 # Terminate a single conversation:
 curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations/$CONV/terminate" \
-  -H "Authorization: Bearer $FOUNTAIN_TOKEN"
+  -H "Authorization: Bearer $FOUNTAIN_API_KEY"
 
 # Terminate a batch (e.g. after a fan-out gather):
 echo "$ids" | xargs -n1 -P10 -I{} \
   curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations/{}/terminate" \
-    -H "Authorization: Bearer $FOUNTAIN_TOKEN"
+    -H "Authorization: Bearer $FOUNTAIN_API_KEY"
 ```
 
 Terminate is idempotent — calling it on an already-terminated conversation is
@@ -217,32 +251,33 @@ harmless. It is **not** the same as deleting: the conversation record and its
 stream history are preserved so you (or the operator) can audit what happened.
 The Sprite is simply stopped and its resources released.
 
-When to terminate:
-- **After Pattern A gather** — terminate all N conversations once you have
-  collected all results (see step 5 in Pattern A above).
-- **After Pattern B** — terminate immediately after reading the stream.
-- **On early exit / error** — if your script errors out before completing,
-  terminate whatever you already spawned. A `trap` works well:
+**Captain-picard is an exception.** It's a long-running orchestrator — you
+generally want to *let it keep running* across multiple cycles rather than
+terminate after each prompt. Use the `/prompts` endpoint (see Multi-turn)
+to send the next ask; only terminate when the slice is genuinely done or
+you're abandoning the cycle.
+
+For one-shot fan-outs (Pattern A), terminate every conversation after the
+gather. For Pattern B blocking spawns, terminate immediately after reading
+the result.
+
+If your script may exit early, install a cleanup trap:
 
 ```bash
-# Set up cleanup at the top of your script, before spawning anything.
 spawned_ids=()
 trap 'echo "${spawned_ids[@]}" | tr " " "\n" | xargs -n1 -P10 -I{} \
   curl -s -X POST "$FOUNTAIN_BASE_URL/api/conversations/{}/terminate" \
-    -H "Authorization: Bearer $FOUNTAIN_TOKEN"' EXIT
-
-# Register each id as you spawn it.
+    -H "Authorization: Bearer $FOUNTAIN_API_KEY"' EXIT
 spawned_ids+=("$CONV")
 ```
 
 ## Important
 
-- **Always terminate when done.** Sprites are real compute. Orphaned conversations run until Fountain's idle timeout — wasteful and expensive.
+- **Always terminate one-shot conversations when done.** Sprites are real compute. Orphaned conversations run until Fountain's idle timeout — wasteful and expensive. (Captain-picard is the exception — it's long-running.)
 - **Always `wait=false` for gather.** Otherwise you'll burn N × `--max-time` seconds for no reason.
 - **Parallelize spawn / poll / gather / terminate** with `xargs -P` — one provisioning takes ~5–15s, and there's no reason to do them sequentially.
-- **Don't recurse forever.** Spawned agents have the same skill. Cap depth with a `MAX_DEPTH` you check before spawning.
 - **Costs add up.** Every conversation provisions a real sandbox. Terminate promptly.
-- **Re-read `$FOUNTAIN_TOKEN` from env on each call.** It's a per-conversation key scoped to this conversation's owner, not a long-lived admin token. Fountain rotates it on every fresh provision and every reattach (e.g. after a deploy or BEAM restart), revoking the previous value. If a request returns 401 with `"reason": "api_key_revoked"`, your cached copy is stale — re-source `$FOUNTAIN_TOKEN` from the environment before retrying. Don't leak it outside the sprite.
+- **`FOUNTAIN_API_KEY` is a long-lived workstation credential** — different from the per-conversation `FOUNTAIN_TOKEN` a Sprite gets. Treat it like an SSH key: never commit, never paste into chat, rotate via the Fountain dashboard if exposed. If you see 401 with `"reason": "api_key_revoked"`, the key was rotated — pull the new value into `.env` and re-source.
+- **`.env` must be gitignored.** The repo's `.gitignore` covers `.env`, `.env.local`, and `.env.*.local`. If you add a new env file with a different name, gitignore it explicitly before populating it.
 - **API path is `/api/...`.** The bare `/conversations` redirects (302 → /login) for non-browser requests.
-- **Provenance is automatic.** `FOUNTAIN_CONVERSATION_ID` is always present in your sprite's environment. Every `POST /api/conversations` call that includes `X-Fountain-Parent-Conversation-Id: $FOUNTAIN_CONVERSATION_ID` records this conversation as the parent, letting the operator reconstruct the full spawn chain.
-- **Cloned repos are under `/workspace/`.** When an environment is configured with repositories, they are cloned to their configured `mount_path` (e.g. `/workspace/my-repo`) before the setup script runs. Always look in `/workspace/` first when you need to find source code.
+- **No parent conv header from a workstation.** `X-Fountain-Parent-Conversation-Id` is for in-sprite spawns where there's a real parent to attribute to. Workstation spawns are root conversations; omit the header.
