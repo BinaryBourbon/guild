@@ -74,9 +74,9 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
-    def patch(self, path: str, json: Any) -> Any:
+    def patch(self, path: str, json: Any, **kwargs: Any) -> Any:
         """PATCH *json* to *path* and return parsed JSON.  Raises on non-2xx."""
         url = self._base_url + path if path.startswith("/") else path
-        resp = self._client.patch(url, json=json, headers=self._auth_headers())
+        resp = self._client.patch(url, json=json, headers=self._auth_headers(), **kwargs)
         resp.raise_for_status()
         return resp.json()

@@ -6,7 +6,6 @@ The transaction boundary belongs to the caller (polling loop).
 """
 from __future__ import annotations
 
-import datetime
 import json
 
 from sqlalchemy.orm import Session
@@ -25,6 +24,7 @@ def write_thread_note(
     """Append a note to *thread_id*.
 
     note_type must be one of: decision, status, error, observation.
+    crud.write_note() flushes the session.
     """
     valid = {"decision", "status", "error", "observation"}
     if note_type not in valid:
@@ -44,9 +44,14 @@ def update_thread_state(
     thread_id: str,
     to_state: str,
 ) -> ActionResult:
-    """Transition *thread_id* to *to_state* with row-level locking."""
+    """Transition *thread_id* to *to_state* with row-level locking.
+
+    Flushes after transition so the state change is visible within the
+    current transaction without committing.
+    """
     try:
         thread = state_machine.transition(thread_id, to_state, session)
+        session.flush()
         return ActionResult(success=True, data={"state": thread.state})
     except state_machine.IllegalTransition as exc:
         return ActionResult(success=False, error=PrimitiveError("permanent", str(exc)))

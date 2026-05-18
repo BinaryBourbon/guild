@@ -1,6 +1,8 @@
 """Communication primitives: issue and PR comments."""
 from __future__ import annotations
 
+import httpx
+
 from guild.github_client import GitHubClient
 from guild.primitives import ActionResult, PrimitiveError
 
@@ -19,6 +21,9 @@ def comment_on_issue(
             json={"body": body},
         )
         return ActionResult(success=True, data={"comment_id": result["id"]})
+    except httpx.HTTPStatusError as exc:
+        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
+        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 

@@ -85,8 +85,19 @@ def test_create_branch_success():
     assert result.data["sha"] == "abc123"
 
 
-def test_create_branch_transient_on_error():
-    client, transport = make_client({
+def test_create_branch_permanent_on_4xx():
+    """422 Reference Already Exists is a permanent error, not transient."""
+    client, _ = make_client({
+        ("GET", "/repos/o/r/git/ref/heads/main"): (200, {"object": {"sha": "abc"}}),
+        ("POST", "/repos/o/r/git/refs"): (422, {"message": "Reference already exists"}),
+    })
+    result = create_branch(client, "o", "r", "existing-branch")
+    assert not result.success
+    assert result.error.kind == "permanent"
+
+
+def test_create_branch_transient_on_5xx():
+    client, _ = make_client({
         ("GET", "/repos/o/r/git/ref/heads/main"): (500, {"message": "server error"}),
     })
     result = create_branch(client, "o", "r", "new-branch")
@@ -134,11 +145,12 @@ def test_assign_to_self():
 
 
 # ---------------------------------------------------------------------------
-# open_pull_request (CI gate)
+# open_pull_request (idempotency + CI gate)
 # ---------------------------------------------------------------------------
 
 def test_open_pr_green_ci():
     client, _ = make_client({
+        ("GET", "/repos/o/r/pulls"): (200, []),  # no existing PR
         ("POST", "/repos/o/r/pulls"): (201, {"number": 10, "head": {"sha": "def456"}}),
         ("GET", "/repos/o/r/commits/def456/check-runs"): (200, {
             "check_runs": [
@@ -151,8 +163,25 @@ def test_open_pr_green_ci():
     assert result.data["pr_number"] == 10
 
 
+def test_open_pr_reuses_existing_pr():
+    """Idempotency: if an open PR exists, reuse it rather than creating a new one."""
+    client, transport = make_client({
+        ("GET", "/repos/o/r/pulls"): (200, [{"number": 99, "head": {"sha": "eee111"}}]),
+        ("GET", "/repos/o/r/commits/eee111/check-runs"): (200, {
+            "check_runs": [{"name": "ci", "status": "completed", "conclusion": "success"}]
+        }),
+    })
+    result = open_pull_request(client, "o", "r", "feat: x", "feat-branch", "main")
+    assert result.success
+    assert result.data["pr_number"] == 99
+    # No POST to /pulls — existing PR was reused
+    post_calls = [c for c in transport.calls if c.method == "POST"]
+    assert len(post_calls) == 0
+
+
 def test_open_pr_failing_ci_returns_permanent_error():
     client, _ = make_client({
+        ("GET", "/repos/o/r/pulls"): (200, []),
         ("POST", "/repos/o/r/pulls"): (201, {"number": 11, "head": {"sha": "ghi789"}}),
         ("GET", "/repos/o/r/commits/ghi789/check-runs"): (200, {
             "check_runs": [
@@ -167,12 +196,13 @@ def test_open_pr_failing_ci_returns_permanent_error():
 
 
 def test_open_pr_no_checks_yet_returns_permanent_error():
-    """No check-runs means CI hasn't started — treat as not-green."""
+    """Empty check-runs means CI hasn't started yet — treat as not-green."""
     client, _ = make_client({
+        ("GET", "/repos/o/r/pulls"): (200, []),
         ("POST", "/repos/o/r/pulls"): (201, {"number": 12, "head": {"sha": "jkl000"}}),
         ("GET", "/repos/o/r/commits/jkl000/check-runs"): (200, {"check_runs": []}),
     })
     result = open_pull_request(client, "o", "r", "feat: z", "feat-branch", "main")
-    # Empty check-runs: not_green is empty list, so actually succeeds
-    # (No checks = nothing failing = allow PR — CI will catch it on review)
-    assert result.success
+    assert not result.success
+    assert result.error.kind == "permanent"
+    assert "no check-runs" in result.error.message

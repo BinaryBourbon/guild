@@ -1,6 +1,8 @@
 """Work-management primitives: assignment, labels, status."""
 from __future__ import annotations
 
+import httpx
+
 from guild.github_client import GitHubClient
 from guild.primitives import ActionResult, PrimitiveError
 
@@ -19,6 +21,9 @@ def assign_to_self(
             json={"assignees": [login]},
         )
         return ActionResult(success=True, data={"assignee": login})
+    except httpx.HTTPStatusError as exc:
+        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
+        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
@@ -37,6 +42,9 @@ def add_label(
             json={"labels": [label]},
         )
         return ActionResult(success=True, data={"label": label})
+    except httpx.HTTPStatusError as exc:
+        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
+        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
@@ -55,5 +63,8 @@ def update_issue_status(
             json={"state": state},
         )
         return ActionResult(success=True, data={"state": state})
+    except httpx.HTTPStatusError as exc:
+        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
+        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
