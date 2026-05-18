@@ -25,7 +25,7 @@ The `reasoning` field is not optional. It gets written as a context note on the 
 
 Guild provides a standard action vocabulary that maps directly to [Action Primitives](05-action-primitives.md):
 
-**`implement`** — begin or continue coding work. Triggers the execution pipeline with a task description.
+**`implement`** — begin or continue coding work. Triggers the execution pipeline with a task description. Every change produced must pass automated verification before the PR is opened — if no automated verification exists for the code being changed, the worker must add one before or alongside the change. See [Verification Requirement](05-action-primitives.md#verification-requirement).
 
 **`plan`** — decompose a work item into smaller issues. Used by PM-style workers to break epics or large tasks into actionable pieces. Creates one or more issues in the configured tracker and optionally links them to the parent. Does not begin implementation.
 
