@@ -4,15 +4,18 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from guild.db import _coerce_psycopg3
+
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 12-factor: DATABASE_URL from environment overrides whatever is in alembic.ini
+# 12-factor: DATABASE_URL from environment overrides whatever is in alembic.ini.
+# Coerce to psycopg3 dialect so Render/Heroku-style postgres:// URLs work.
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    config.set_main_option("sqlalchemy.url", _coerce_psycopg3(database_url))
 
 
 def run_migrations_offline() -> None:
