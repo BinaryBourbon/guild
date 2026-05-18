@@ -21,10 +21,18 @@ def _make_thread(session, *, suffix: str = "", parent_id=None):
     )
 
 
+def _advance_to_done(thread, session):
+    """Advance a fresh (unnoticed) thread to 'done' via the valid path."""
+    state_machine.transition(thread.id, "noticed", session)
+    state_machine.transition(thread.id, "claimed", session)
+    state_machine.transition(thread.id, "executing", session)
+    state_machine.transition(thread.id, "pr_open", session)
+    state_machine.transition(thread.id, "done", session)
+
+
 def test_planned_done_fires_when_all_children_terminal(session):
     """Parent transitions planned→done when every child is terminal."""
     parent = _make_thread(session, suffix="p")
-    # Advance parent to planned
     state_machine.transition(parent.id, "noticed", session)
     state_machine.transition(parent.id, "claimed", session)
     state_machine.transition(parent.id, "executing", session)
@@ -32,10 +40,7 @@ def test_planned_done_fires_when_all_children_terminal(session):
     session.flush()
 
     child1 = _make_thread(session, suffix="c1", parent_id=parent.id)
-    state_machine.transition(child1.id, "noticed", session)
-    state_machine.transition(child1.id, "claimed", session)
-    state_machine.transition(child1.id, "executing", session)
-    state_machine.transition(child1.id, "done", session)
+    _advance_to_done(child1, session)
     session.flush()
 
     child2 = _make_thread(session, suffix="c2", parent_id=parent.id)
@@ -60,10 +65,7 @@ def test_planned_done_does_not_fire_if_child_active(session):
     session.flush()
 
     child1 = _make_thread(session, suffix="c3", parent_id=parent.id)
-    state_machine.transition(child1.id, "noticed", session)
-    state_machine.transition(child1.id, "claimed", session)
-    state_machine.transition(child1.id, "executing", session)
-    state_machine.transition(child1.id, "done", session)
+    _advance_to_done(child1, session)
     session.flush()
 
     child2 = _make_thread(session, suffix="c4", parent_id=parent.id)
@@ -88,10 +90,7 @@ def test_planned_done_noop_if_parent_not_planned(session):
     # Parent is in 'executing', not 'planned'
 
     child = _make_thread(session, suffix="c5", parent_id=parent.id)
-    state_machine.transition(child.id, "noticed", session)
-    state_machine.transition(child.id, "claimed", session)
-    state_machine.transition(child.id, "executing", session)
-    state_machine.transition(child.id, "done", session)
+    _advance_to_done(child, session)
     session.flush()
 
     check_planned_done(session, parent.id)
