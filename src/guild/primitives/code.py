@@ -1,12 +1,18 @@
 """Code primitives: branch, commit, PR.
 
-open_pull_request gates on CI: it checks /check-runs after creating the PR
-and returns PrimitiveError('permanent') if checks are not all green.
-The polling loop will retry on the next cycle once CI finishes.
+open_pull_request gates on CI before creating the PR:
+1. Check for an existing open PR (idempotency — reuse it and re-verify CI).
+2. Resolve branch HEAD SHA via GET /git/ref/heads/{branch}.
+3. Poll check-runs on that SHA.
+4. If no checks yet: return PrimitiveError('transient') — CI hasn't queued yet,
+   retry later.  This is transient because the situation resolves itself once
+   the CI runner picks up the push.
+5. If checks are red: return PrimitiveError('permanent') — the worker must fix
+   the failure before retrying.
+6. Only if checks are all green: POST /pulls to create the PR.
 
-open_pull_request is idempotent: it checks for an existing open PR on the
-same head/base before creating a new one. This prevents 422 errors when
-the polling loop retries after a transient CI failure.
+This ordering guarantees a PR is never opened on a failing or unverified
+branch, per docs/05 Verification Requirement and engineering-plan §3.
 """
 from __future__ import annotations
 
@@ -17,15 +23,7 @@ import httpx
 
 from guild.github_client import GitHubClient
 from guild.primitives import ActionResult, PrimitiveError
-
-
-def _http_error_kind(exc: httpx.HTTPStatusError) -> str:
-    """Map HTTP status to primitive error kind.
-
-    4xx = permanent (bad request, auth, not-found — retrying won't help).
-    5xx = transient (server error — may succeed on retry).
-    """
-    return "permanent" if 400 <= exc.response.status_code < 500 else "transient"
+from guild.primitives._utils import _http_error_kind
 
 
 def create_branch(
@@ -43,7 +41,7 @@ def create_branch(
             f"/repos/{owner}/{repo}/git/refs",
             json={"ref": f"refs/heads/{branch}", "sha": sha},
         )
-        return ActionResult(success=True, data={"branch": branch, "sha": sha})
+        return ActionResult(success=True, artifact={"branch": branch, "sha": sha})
     except httpx.HTTPStatusError as exc:
         return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
@@ -111,7 +109,7 @@ def commit_and_push(
     """Commit *files* to *branch* using the six-step GitHub API sequence."""
     try:
         commit = _commit_files(client, owner, repo, branch, files, message)
-        return ActionResult(success=True, data={"sha": commit["sha"]})
+        return ActionResult(success=True, artifact={"sha": commit["sha"]})
     except httpx.HTTPStatusError as exc:
         return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
@@ -139,43 +137,50 @@ def open_pull_request(
     base: str,
     body: str = "",
 ) -> ActionResult:
-    """Open a PR (idempotent) and verify CI checks are green.
+    """Open a PR (idempotent) — CI gate runs BEFORE PR creation.
 
-    Checks for an existing open PR first to avoid duplicate creation on retry.
-    If checks are not all green, returns PrimitiveError('permanent') so the
-    polling loop retries next cycle once CI has had time to complete.
-    Empty check-runs (CI not yet queued) is also treated as not-green.
+    Ordering enforced:
+    1. Look up any existing open PR — reuse it if found (idempotency).
+    2. Resolve branch HEAD SHA via GET /git/ref/heads/{head}.
+    3. Poll check-runs on that SHA.
+    4. No checks yet → PrimitiveError('transient'): CI hasn't queued, retry later.
+    5. Any check not green → PrimitiveError('permanent'): fix the code first.
+    6. All green → POST /pulls (or return existing PR).
     """
     try:
-        # Idempotency: check for an existing open PR before creating
+        # Step 1: idempotency — check for an existing open PR
         existing = client.get(
             f"/repos/{owner}/{repo}/pulls",
             params={"head": f"{owner}:{head}", "base": base, "state": "open"},
         )
-        if existing:
-            pr = existing[0]
-        else:
-            pr = client.post(
-                f"/repos/{owner}/{repo}/pulls",
-                json={"title": title, "head": head, "base": base, "body": body},
-            )
-        pr_number = pr["number"]
-        head_sha = pr["head"]["sha"]
+        existing_pr = existing[0] if existing else None
+
+        # Step 2: resolve branch HEAD SHA from the ref (authoritative, independent
+        # of whether a PR exists yet)
+        ref = client.get(f"/repos/{owner}/{repo}/git/ref/heads/{head}")
+        head_sha = ref["object"]["sha"]
     except httpx.HTTPStatusError as exc:
         return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
-    # Gate: verify CI checks are all green
+    # Step 3: gate on CI check-runs BEFORE touching /pulls
     try:
         checks = client.get(f"/repos/{owner}/{repo}/commits/{head_sha}/check-runs")
         runs = checks.get("check_runs", [])
+
         if not runs:
-            # No checks queued yet — CI hasn't started; treat as not-green
+            # No checks queued yet — CI hasn't started on this branch.
+            # This is TRANSIENT: the CI runner will pick up the push shortly;
+            # retrying after a delay will find checks queued.
             return ActionResult(
                 success=False,
-                error=PrimitiveError("permanent", "no check-runs found; CI may not have started yet", {"pr_number": pr_number}),
+                error=PrimitiveError(
+                    "transient",
+                    "[transient] no check-runs yet: CI has not started on this branch; retry later",
+                ),
             )
+
         not_green = [
             r for r in runs
             if r.get("status") != "completed" or r.get("conclusion") not in ("success", "skipped", "neutral")
@@ -187,7 +192,7 @@ def open_pull_request(
                 error=PrimitiveError(
                     "permanent",
                     f"CI checks not green: {names}",
-                    {"pr_number": pr_number, "failing_checks": names},
+                    {"failing_checks": names},
                 ),
             )
     except httpx.HTTPStatusError as exc:
@@ -195,4 +200,19 @@ def open_pull_request(
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
-    return ActionResult(success=True, data={"pr_number": pr_number, "head_sha": head_sha})
+    # Step 4 (step 6 in docstring): all checks green — create or reuse the PR
+    try:
+        if existing_pr is not None:
+            pr = existing_pr
+        else:
+            pr = client.post(
+                f"/repos/{owner}/{repo}/pulls",
+                json={"title": title, "head": head, "base": base, "body": body},
+            )
+        pr_number = pr["number"]
+    except httpx.HTTPStatusError as exc:
+        return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
+    except Exception as exc:  # noqa: BLE001
+        return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
+
+    return ActionResult(success=True, artifact={"pr_number": pr_number, "head_sha": head_sha})
