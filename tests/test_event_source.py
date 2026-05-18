@@ -102,7 +102,8 @@ def test_on_event_called_for_new_event(db_engine):
 
 
 def test_dedup_second_poll_does_not_double_write(db_engine):
-    """Second poll with same updated_at does not insert a duplicate event."""
+    """Second poll with same updated_at does not insert a duplicate event,
+    and the on_event handler is called exactly once (not on the duplicate poll)."""
     anchor_id = _unique_anchor()
     with _session_ctx(db_engine) as seed_session:
         thread = _seed_active_thread(seed_session, anchor_id)
@@ -118,9 +119,9 @@ def test_dedup_second_poll_does_not_double_write(db_engine):
     source.on_event(lambda tid, ev: events_seen.append((tid, ev)))
 
     source._poll_once()
-    source._poll_once()  # Second poll — same updated_at
+    source._poll_once()  # Second poll — same updated_at, should be a no-op
 
-    # on_event may be called each poll, but only 1 row in the DB
+    # Only 1 row in the DB (deduped)
     expected_event_id = _deterministic_event_id(
         thread_id, "github", "issue.polled",
         f"{anchor_id}:{updated_at}",
@@ -130,6 +131,12 @@ def test_dedup_second_poll_does_not_double_write(db_engine):
             select(ThreadEvent).where(ThreadEvent.id == expected_event_id)
         ).scalars().all()
     assert len(rows) == 1  # deduped — only one row despite two polls
+
+    # Handler must have been called exactly once — not on the second (duplicate) poll
+    assert len(events_seen) == 1, (
+        f"Expected handler called once across two polls of unchanged thread, "
+        f"got {len(events_seen)}"
+    )
 
 
 def test_on_event_not_called_for_terminal_thread(db_engine):
