@@ -2,12 +2,16 @@
 
 All tests use real Postgres via the `session` fixture.
 GitHub calls are mocked via a fake GitHubClient.
+
+The ClaimingLoop calls session.commit() internally; we patch it to a flush()
+so tests stay within the conftest rollback isolation boundary.
 """
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, patch
 from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from guild import crud, state_machine
 from guild.claiming import ClaimingLoop
@@ -41,10 +45,20 @@ def _make_issue(number: int = 1, assignee=None, title: str = "Test issue") -> di
 
 
 def _make_session_factory(session):
-    """Return a session factory that yields the provided session."""
+    """Return a context-manager factory that yields the shared test session.
+
+    commit() is replaced by flush() so the conftest rollback provides
+    isolation — no data escapes the test transaction.
+    """
     @contextmanager
     def factory():
-        yield session
+        # Patch commit → flush for the duration of this context
+        original_commit = session.commit
+        session.commit = session.flush
+        try:
+            yield session
+        finally:
+            session.commit = original_commit
     return factory
 
 
