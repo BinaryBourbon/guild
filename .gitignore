@@ -3,6 +3,9 @@
 *.swo
 .idea/
 .vscode/
+.env
+.env.local
+.env.*.local
 
 # Sprite-side artifacts that may end up here if you run captain-picard
 # locally rather than in a Fountain sprite. The orchestrator commits plan/
