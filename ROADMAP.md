@@ -4,11 +4,10 @@ The captain-picard orchestrator reads this every cycle and writes the conversati
 
 ## Now
 
-- **g2-slice-3-redo** — general-purpose-engineer (branch: g2-slice-3-redo, see plan/g2-slice-3-redo)
+- **g2-slice-4-decision** — general-purpose-engineer (branch: g2-slice-4-decision, see plan/g2-slice-4-decision)
 
 ## Next
 
-- **g2-slice-4-decision** — context assembly + decision layer (decide() via tool_use); dispatch after slice-3-redo merges green
 - **g2-slice-5-e2e** — PollingEventSource + claiming loop + asyncio entry point (items #4, #5, #8, #9)
 
 ## Gated
