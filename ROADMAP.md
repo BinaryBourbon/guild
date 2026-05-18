@@ -4,11 +4,11 @@ The captain-picard orchestrator reads this every cycle and writes the conversati
 
 ## Now
 
-- **g2-slice-4-decision** — general-purpose-engineer (branch: g2-slice-4-decision, see plan/g2-slice-4-decision)
+- **g2-slice-5-e2e** — general-purpose-engineer (branch: g2-slice-5-e2e, see plan/g2-slice-5-e2e)
 
 ## Next
 
-- **g2-slice-5-e2e** — PollingEventSource + claiming loop + asyncio entry point (items #4, #5, #8, #9)
+*(empty — G2 is the next gate)*
 
 ## Gated
 
