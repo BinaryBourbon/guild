@@ -95,8 +95,10 @@ def test_on_event_called_for_new_event(db_engine):
 
     source._poll_once()
 
-    assert len(events_seen) == 1
-    tid, ev = events_seen[0]
+    # Filter to only events for this test's thread (other committed threads may exist)
+    my_events = [(tid, ev) for tid, ev in events_seen if tid == thread_id]
+    assert len(my_events) == 1
+    tid, ev = my_events[0]
     assert tid == thread_id
     assert ev["type"] == "issue.polled"
 
@@ -132,10 +134,12 @@ def test_dedup_second_poll_does_not_double_write(db_engine):
         ).scalars().all()
     assert len(rows) == 1  # deduped — only one row despite two polls
 
+    # Filter to only events for this test's thread (other committed threads may exist)
+    my_events = [tid for tid, ev in events_seen if tid == thread_id]
     # Handler must have been called exactly once — not on the second (duplicate) poll
-    assert len(events_seen) == 1, (
+    assert len(my_events) == 1, (
         f"Expected handler called once across two polls of unchanged thread, "
-        f"got {len(events_seen)}"
+        f"got {len(my_events)}"
     )
 
 
