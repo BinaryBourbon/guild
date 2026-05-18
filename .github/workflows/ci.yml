@@ -46,3 +46,6 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+      - name: Test downgrade
+        run: alembic downgrade base
