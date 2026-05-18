@@ -5,6 +5,7 @@ import httpx
 
 from guild.github_client import GitHubClient
 from guild.primitives import ActionResult, PrimitiveError
+from guild.primitives._utils import _http_error_kind
 
 
 def comment_on_issue(
@@ -20,10 +21,9 @@ def comment_on_issue(
             f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
             json={"body": body},
         )
-        return ActionResult(success=True, data={"comment_id": result["id"]})
+        return ActionResult(success=True, artifact={"comment_id": result["id"]})
     except httpx.HTTPStatusError as exc:
-        kind = "permanent" if 400 <= exc.response.status_code < 500 else "transient"
-        return ActionResult(success=False, error=PrimitiveError(kind, str(exc)))
+        return ActionResult(success=False, error=PrimitiveError(_http_error_kind(exc), str(exc)))
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))
 
