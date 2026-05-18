@@ -175,3 +175,67 @@ def test_unnoticed_to_noticed_transition(session):
     thread = get_thread(thread_id, session)
     # After claiming, state should be 'noticed'
     assert thread.state == "noticed"
+
+
+# ---------------------------------------------------------------------------
+# Slice 5 review item #1 — terminal-state guard (filter 4)
+# ---------------------------------------------------------------------------
+
+def test_filter4_skips_done_thread(session):
+    """Filter 4 (slice 5 review item #1): done threads must not trigger on_event.
+
+    A done thread whose GitHub issue still carries the guild-claim label would
+    previously cause a wasted Anthropic API call every claim cycle.  The
+    terminal-state guard must short-circuit before calling on_event.
+    """
+    # Build a thread and walk it to the 'done' terminal state.
+    thread = crud.create_thread(
+        anchor_type="github_issue",
+        anchor_id="owner/repo#1",
+        anchor_url="https://github.com/owner/repo/issues/1",
+        anchor_title="Done issue",
+        session=session,
+    )
+    # noticed → claimed → executing → pr_open → done
+    state_machine.transition(thread.id, "noticed", session)
+    state_machine.transition(thread.id, "claimed", session)
+    state_machine.transition(thread.id, "executing", session)
+    state_machine.transition(thread.id, "pr_open", session)
+    state_machine.transition(thread.id, "done", session)
+    session.flush()
+
+    loop, github, events = _make_loop(session)
+    loop._claim_once()
+
+    # on_event must NOT be called for a done thread
+    assert events == [], (
+        f"Expected no events for done thread, got {events}"
+    )
+
+
+def test_filter4_allows_abandoned_different_worker(session):
+    """Filter 4: abandoned thread owned by a *different* worker must still fire on_event.
+
+    This is the legitimate re-claim path: the previous worker gave up, so our
+    worker is allowed to pick it up.  The terminal-state guard must not block
+    this path.
+    """
+    thread = crud.create_thread(
+        anchor_type="github_issue",
+        anchor_id="owner/repo#1",
+        anchor_url="https://github.com/owner/repo/issues/1",
+        anchor_title="Abandoned by other",
+        session=session,
+    )
+    state_machine.transition(thread.id, "noticed", session)
+    state_machine.transition(thread.id, "abandoned", session)
+    thread.owner_id = "other-worker-99"
+    session.flush()
+
+    loop, github, events = _make_loop(session, worker_id="our-worker")
+    loop._claim_once()
+
+    # on_event MUST be called — this is the re-claim path
+    assert len(events) == 1, (
+        f"Expected 1 event for re-claimable abandoned thread, got {events}"
+    )
