@@ -4,15 +4,15 @@ The captain-picard orchestrator reads this every cycle and writes the conversati
 
 ## Now
 
-- **phase-0-framing** — customer-researcher (branch: phase-0-framing, see PR)
+- **wedge-2-plan** — general-purpose-engineer (branch: wedge-2-plan, see PR #2)
 
 ## Next
 
-_(empty — phase-0-framing dispatched; G0 picks the wedge before anything else moves here)_
+_(empty — wedge-2-plan in flight; G1 gates all further dispatch)_
 
 ## Gated
 
-- **G0** — Pick the first wedge from the framing PR.
-- **G1** — Wedge plan + ADRs locked (event ingestion path, thread linkage, state persistence, action primitive runtime, worker decision contract).
-- **G2** — First worker shippable end-to-end in a sandbox against a seeded issue.
-- **G3** — Self-hosting cutover: point the worker at live issues in this repo.
+- **G0** ✓ — Wedge 2 (Thread-First) selected. See `decisions/0002-wedge-2-thread-first.md`.
+- **G1** — Wedge plan + ADRs approved by pr-reviewer. Plan must cover: thread schema, state machine, action primitive runtime, decision layer contract, context assembly, polling→webhook migration path.
+- **G2** — First worker shippable end-to-end in a sandbox against a seeded issue. Human gates on whether this is real enough to point at this repo.
+- **G3** — Self-hosting cutover: point the worker at live issues in this repo. Human gives go/no-go.
