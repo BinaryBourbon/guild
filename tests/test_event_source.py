@@ -1,6 +1,9 @@
 """Tests for PollingEventSource.
 
-GitHub calls are mocked. Database interactions use real Postgres.
+GitHub calls are mocked. Database interactions use real Postgres via db_engine.
+Tests that commit data use unique ULID-based anchor IDs so repeated runs
+don't collide on the unique (anchor_type, anchor_id) constraint.
+
 Focuses on:
 - Dedup: second poll with same updated_at does NOT double-write
 - on_event called for new events
@@ -8,24 +11,30 @@ Focuses on:
 """
 from __future__ import annotations
 
-import datetime
 from contextlib import contextmanager
 from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
+from ulid import ULID
 
 from guild import crud, state_machine
 from guild.event_source import PollingEventSource, _deterministic_event_id
 from guild.models import Thread, ThreadEvent
 
 
-def _seed_active_thread(session, suffix="") -> Thread:
+def _unique_issue_number() -> str:
+    """Return a unique pseudo-issue-number for this test run to avoid anchor collisions."""
+    return str(ULID())[:8]
+
+
+def _seed_active_thread(session, issue_num: str) -> Thread:
     """Create a thread in 'noticed' state (active, will be polled)."""
     thread = crud.create_thread(
         anchor_type="github_issue",
-        anchor_id=f"owner/repo#555{suffix}",
-        anchor_url="https://github.com/owner/repo/issues/555",
+        anchor_id=f"owner/repo#{issue_num}",
+        anchor_url=f"https://github.com/owner/repo/issues/{issue_num}",
         anchor_title="Test Issue",
         session=session,
     )
@@ -34,10 +43,10 @@ def _seed_active_thread(session, suffix="") -> Thread:
     return thread
 
 
-def _make_github_mock(updated_at: str = "2024-01-01T00:00:00Z") -> MagicMock:
+def _make_github_mock(issue_num: str, updated_at: str = "2024-01-01T00:00:00Z") -> MagicMock:
     mock = MagicMock()
     mock.get.return_value = {
-        "number": 555,
+        "number": issue_num,
         "title": "Test Issue",
         "state": "open",
         "updated_at": updated_at,
@@ -46,31 +55,38 @@ def _make_github_mock(updated_at: str = "2024-01-01T00:00:00Z") -> MagicMock:
     return mock
 
 
-def _make_session_factory(db_engine):
-    """Return a real session factory using the test engine."""
-    from sqlalchemy.orm import sessionmaker
+@contextmanager
+def _session_ctx(db_engine):
+    """Real session with commit support (for tests that need real persistence)."""
+    Session = sessionmaker(db_engine)
+    sess = Session()
+    try:
+        yield sess
+    except Exception:
+        sess.rollback()
+        raise
+    finally:
+        sess.close()
 
+
+def _make_session_factory(db_engine):
+    """Return a context-manager factory producing real sessions from db_engine."""
     @contextmanager
     def factory():
-        Session = sessionmaker(db_engine)
-        sess = Session()
-        try:
+        with _session_ctx(db_engine) as sess:
             yield sess
-        except Exception:
-            sess.rollback()
-            raise
-        finally:
-            sess.close()
-
     return factory
 
 
-def test_on_event_called_for_new_event(session, db_engine):
+def test_on_event_called_for_new_event(db_engine):
     """on_event handler is called when a new event is written for an active thread."""
-    thread = _seed_active_thread(session)
-    session.commit()
+    issue_num = _unique_issue_number()
+    with _session_ctx(db_engine) as seed_session:
+        thread = _seed_active_thread(seed_session, issue_num)
+        seed_session.commit()
+    thread_id = thread.id
 
-    github = _make_github_mock()
+    github = _make_github_mock(issue_num)
     factory = _make_session_factory(db_engine)
     events_seen = []
 
@@ -81,16 +97,21 @@ def test_on_event_called_for_new_event(session, db_engine):
 
     assert len(events_seen) == 1
     tid, ev = events_seen[0]
-    assert tid == thread.id
+    assert tid == thread_id
     assert ev["type"] == "issue.polled"
 
 
-def test_dedup_second_poll_does_not_double_write(session, db_engine):
+def test_dedup_second_poll_does_not_double_write(db_engine):
     """Second poll with same updated_at does not insert a duplicate event."""
-    thread = _seed_active_thread(session, suffix="d")
-    session.commit()
+    issue_num = _unique_issue_number()
+    with _session_ctx(db_engine) as seed_session:
+        thread = _seed_active_thread(seed_session, issue_num)
+        seed_session.commit()
+    thread_id = thread.id
+    anchor_id = thread.anchor_id
 
-    github = _make_github_mock(updated_at="2024-06-01T12:00:00Z")
+    updated_at = "2024-06-01T12:00:00Z"
+    github = _make_github_mock(issue_num, updated_at=updated_at)
     factory = _make_session_factory(db_engine)
     events_seen = []
 
@@ -101,36 +122,37 @@ def test_dedup_second_poll_does_not_double_write(session, db_engine):
     source._poll_once()  # Second poll — same updated_at
 
     # on_event is called each poll, but only 1 row in the DB
-    with factory() as s:
-        event_id = _deterministic_event_id(
-            thread.id, "github", "issue.polled",
-            f"{thread.anchor_id}:2024-06-01T12:00:00Z",
-        )
-        rows = s.execute(
-            select(ThreadEvent).where(ThreadEvent.id == event_id)
+    expected_event_id = _deterministic_event_id(
+        thread_id, "github", "issue.polled",
+        f"{anchor_id}:{updated_at}",
+    )
+    with _session_ctx(db_engine) as check_session:
+        rows = check_session.execute(
+            select(ThreadEvent).where(ThreadEvent.id == expected_event_id)
         ).scalars().all()
     assert len(rows) == 1  # deduped — only one row despite two polls
 
 
-def test_on_event_not_called_for_inactive_thread(session, db_engine):
+def test_on_event_not_called_for_terminal_thread(db_engine):
     """on_event is NOT called for threads in terminal states."""
-    # Create a done thread (terminal — should not be polled)
-    thread = crud.create_thread(
-        anchor_type="github_issue",
-        anchor_id="owner/repo#777",
-        anchor_url="https://github.com/owner/repo/issues/777",
-        anchor_title="Done thread",
-        session=session,
-    )
-    state_machine.transition(thread.id, "noticed", session)
-    state_machine.transition(thread.id, "claimed", session)
-    state_machine.transition(thread.id, "executing", session)
-    # Use pr_open → done
-    state_machine.transition(thread.id, "pr_open", session)
-    state_machine.transition(thread.id, "done", session)
-    session.commit()
+    issue_num = _unique_issue_number()
+    with _session_ctx(db_engine) as seed_session:
+        thread = crud.create_thread(
+            anchor_type="github_issue",
+            anchor_id=f"owner/repo#{issue_num}",
+            anchor_url=f"https://github.com/owner/repo/issues/{issue_num}",
+            anchor_title="Done thread",
+            session=seed_session,
+        )
+        state_machine.transition(thread.id, "noticed", seed_session)
+        state_machine.transition(thread.id, "claimed", seed_session)
+        state_machine.transition(thread.id, "executing", seed_session)
+        state_machine.transition(thread.id, "pr_open", seed_session)
+        state_machine.transition(thread.id, "done", seed_session)
+        seed_session.commit()
+    thread_id = thread.id
 
-    github = _make_github_mock()
+    github = _make_github_mock(issue_num)
     factory = _make_session_factory(db_engine)
     events_seen = []
 
@@ -140,7 +162,7 @@ def test_on_event_not_called_for_inactive_thread(session, db_engine):
     source._poll_once()
 
     # The done thread should NOT appear in events
-    assert all(tid != thread.id for tid, _ in events_seen)
+    assert all(tid != thread_id for tid, _ in events_seen)
 
 
 def test_deterministic_event_id_stable():
