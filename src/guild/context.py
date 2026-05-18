@@ -4,17 +4,16 @@ Assembles a structured context dict from Postgres that represents the
 current state of a thread and its history.  The context is passed as
 the user message to the decision layer.
 
-Query design: single round-trip using joined-load relationships so
-SQLAlchemy does not issue N+1 queries for events/notes/artifacts.
+Query design: single round-trip using selectinload on Thread relationships
+so SQLAlchemy does not issue N+1 queries for events/notes/artifacts.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from guild.models import Thread, ThreadArtifact, ThreadEvent, ThreadNote
+from guild.models import Thread
 
 # Maximum items returned per collection to bound prompt size
 _MAX_EVENTS = 50
