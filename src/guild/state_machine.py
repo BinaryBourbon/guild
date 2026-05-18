@@ -1,8 +1,8 @@
 """State machine for Guild threads.
 
-TRANSITIONS defines the legal moves.  transition() enforces them under a
-row-level lock so concurrent workers cannot double-claim or concurrently
-advance the same thread.
+TRANSITIONS defines the legal moves between active states.  'abandoned' is
+not listed in any transition set — it is universally reachable from any
+active state and is handled as a special case in transition().
 
 Callers own the transaction boundary: transition() flushes but does NOT
 commit.  Commit or rollback is the caller’s responsibility.
@@ -16,15 +16,15 @@ from ulid import ULID
 
 from guild.models import Thread, ThreadEvent
 
-# Legal transitions per engineering plan §2.
-# 'abandoned' is universally reachable from any active state and is
-# handled as a special case in transition() — not listed here.
+# Legal transitions between active states per engineering plan §2.
+# 'abandoned' is intentionally absent from every frozenset — transition()
+# allows it unconditionally from any non-terminal state via the special case.
 TRANSITIONS: dict[str, frozenset[str]] = {
     "unnoticed": frozenset({"noticed"}),
     "noticed":   frozenset({"claimed", "unnoticed"}),
     "claimed":   frozenset({"executing"}),
-    "executing": frozenset({"pr_open", "blocked", "planned", "abandoned"}),
-    "pr_open":   frozenset({"executing", "done", "abandoned"}),
+    "executing": frozenset({"pr_open", "blocked", "planned"}),
+    "pr_open":   frozenset({"executing", "done"}),
     "blocked":   frozenset({"executing"}),
     "planned":   frozenset({"done"}),
 }
@@ -43,8 +43,11 @@ def transition(thread_id: str, to_state: str, session: Session) -> Thread:
     the duration of the caller’s transaction, preventing concurrent workers
     from racing on the same thread.
 
-    Writes a ``state.transition`` event to thread_events in the same
-    session (same transaction as the state update).
+    'abandoned' is accepted from any active (non-terminal) state regardless
+    of what TRANSITIONS specifies.  All other transitions are validated
+    against TRANSITIONS.
+
+    Writes a ``state.transition`` event to thread_events in the same session.
 
     Raises:
         ValueError: thread_id not found.
