@@ -101,10 +101,10 @@ def test_assemble_context_with_artifacts(session):
 
 
 def test_assemble_context_event_cap(session):
-    """Events are capped at _MAX_EVENTS (50); oldest are dropped."""
+    """Events are capped at _MAX_EVENTS (20); oldest are dropped."""
     from guild.context import _MAX_EVENTS
     thread = _make_thread(session)
-    for i in range(_MAX_EVENTS + 5):
+    for i in range(_MAX_EVENTS + 5):  # seed 25 events
         session.add(ThreadEvent(
             id=str(ULID()), thread_id=thread.id, source="github",
             type="push", timestamp=_ts(i), payload={"n": i},
@@ -133,3 +133,51 @@ def test_assemble_context_timestamps_serialized(session):
     # Parseable as ISO datetime
     parsed = datetime.datetime.fromisoformat(ts)
     assert parsed == _ts(0)
+
+
+# ---------------------------------------------------------------------------
+# New tests for fix items 10-12
+# ---------------------------------------------------------------------------
+
+def test_assemble_context_includes_current_event(session):
+    """Fix #10: current_event must appear in the assembled context packet."""
+    thread = _make_thread(session)
+    event = {"source": "github", "type": "issue.commented", "payload": {"body": "hello"}}
+
+    ctx = assemble_context(session, thread.id, current_event=event)
+
+    assert "current_event" in ctx
+    assert ctx["current_event"] == event
+
+
+def test_assemble_context_event_cap_25_seeds(session):
+    """Fix #11: with 25 seeded events, at most 20 appear in 'events'."""
+    from guild.context import _MAX_EVENTS
+    assert _MAX_EVENTS == 20, "_MAX_EVENTS must be 20 per spec"
+
+    thread = _make_thread(session)
+    for i in range(25):
+        session.add(ThreadEvent(
+            id=str(ULID()), thread_id=thread.id, source="github",
+            type="push", timestamp=_ts(i), payload={"n": i},
+        ))
+    session.flush()
+
+    ctx = assemble_context(session, thread.id)
+    assert len(ctx["events"]) <= 20
+
+
+def test_assemble_context_notes_unbounded(session):
+    """Fix #12: all notes are returned regardless of count — no cap."""
+    thread = _make_thread(session)
+    for i in range(25):
+        session.add(ThreadNote(
+            id=str(ULID()), thread_id=thread.id,
+            author_id="worker",
+            note_type="status",
+            body=f"note {i}",
+        ))
+    session.flush()
+
+    ctx = assemble_context(session, thread.id)
+    assert len(ctx["notes"]) == 25

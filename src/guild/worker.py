@@ -79,12 +79,13 @@ def run_event(
     NOT re-raise so the calling loop continues.
     """
     try:
-        context = assemble_context(session, thread_id)
+        context = assemble_context(session, thread_id, current_event=event)
         action, params = decide(
             context,
             anthropic_client=anthropic_client,
             session=session,
             thread_id=thread_id,
+            current_event=event,
         )
 
         if action == "wait":
@@ -105,6 +106,11 @@ def run_event(
             session.flush()
             session.commit()
             logger.info("Thread %s claimed", thread_id)
+            return
+
+        if action == "escalate":
+            logger.warning("Thread %s: decision=escalate (invalid model output)", thread_id)
+            session.commit()
             return
 
         primitive_fn = _get_primitive_fn(action)

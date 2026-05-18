@@ -16,12 +16,11 @@ from sqlalchemy.orm import Session, selectinload
 from guild.models import Thread
 
 # Maximum items returned per collection to bound prompt size
-_MAX_EVENTS = 50
-_MAX_NOTES = 20
+_MAX_EVENTS = 20
 _MAX_ARTIFACTS = 10
 
 
-def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
+def assemble_context(session: Session, thread_id: str, current_event: dict | None = None) -> dict[str, Any]:
     """Return a structured context dict for *thread_id*.
 
     The dict shape is stable and used directly as the user message body
@@ -29,8 +28,9 @@ def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
 
     - thread: core thread fields
     - events: recent GitHub events (capped at _MAX_EVENTS, newest last)
-    - notes: worker observations/decisions (capped at _MAX_NOTES, newest last)
+    - notes: worker observations/decisions (all notes, no cap)
     - artifacts: produced artifacts like PRs (capped at _MAX_ARTIFACTS)
+    - current_event: the event being processed right now
 
     Raises ValueError if the thread is not found.
     """
@@ -46,9 +46,9 @@ def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
     events_sorted = sorted(thread.events, key=lambda e: e.timestamp)
     events_tail = events_sorted[-_MAX_EVENTS:]
 
-    # Notes newest-last so the most recent observation is at the bottom
+    # Notes newest-last so the most recent observation is at the bottom.
+    # All notes are returned unconditionally — this is the continuity mechanism.
     notes_sorted = sorted(thread.notes, key=lambda n: n.created_at)
-    notes_tail = notes_sorted[-_MAX_NOTES:]
 
     # Artifacts newest-last
     artifacts_sorted = sorted(thread.artifacts, key=lambda a: a.created_at)
@@ -83,7 +83,7 @@ def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
                 "body": n.body,
                 "created_at": n.created_at.isoformat() if n.created_at else None,
             }
-            for n in notes_tail
+            for n in notes_sorted
         ],
         "artifacts": [
             {
@@ -94,4 +94,5 @@ def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
             }
             for a in artifacts_tail
         ],
+        "current_event": current_event if current_event is not None else {},
     }
