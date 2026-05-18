@@ -9,9 +9,9 @@ Conflict-avoidance filters (all required, per item #5):
 """
 from __future__ import annotations
 
+import datetime
 import logging
 import threading
-import time
 from typing import Any, Callable
 
 from sqlalchemy import select
@@ -21,6 +21,7 @@ from guild import crud, state_machine
 from guild.config import Config
 from guild.github_client import GitHubClient
 from guild.models import Thread
+from guild.state_machine import TERMINAL_STATES
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class ClaimingLoop:
     """Periodically checks GitHub for claimable issues and upserts threads.
 
     Issues that pass all three conflict filters get a Thread upserted and
-    transition to 'noticed', then the on_event handler is called so the
+    transitioned to 'noticed', then the on_event handler is called so the
     decision layer can immediately act.
     """
 
@@ -97,7 +98,7 @@ class ClaimingLoop:
             existing = self._find_thread(session, anchor_type, anchor_id)
 
             if existing is not None:
-                # Filter 2: active thread from any worker
+                # Filter 2: active thread from any worker — someone else is on it
                 if existing.state in _ACTIVE_WORKER_STATES:
                     logger.debug(
                         "Issue #%s has active thread %s (state=%s); skipping",
@@ -105,7 +106,7 @@ class ClaimingLoop:
                     )
                     return
 
-                # Filter 3 (item #5): this worker previously abandoned it
+                # Filter 3 (item #5): this worker previously abandoned it — don't retry
                 if (
                     existing.state == "abandoned"
                     and existing.owner_id == self._config.worker_id
@@ -116,7 +117,7 @@ class ClaimingLoop:
                     )
                     return
 
-            # Upsert thread
+            # Create thread if it doesn't exist yet
             if existing is None:
                 thread = crud.create_thread(
                     anchor_type=anchor_type,
@@ -131,7 +132,9 @@ class ClaimingLoop:
             else:
                 thread = existing
 
-            # Transition unnoticed → noticed if needed
+            # Transition unnoticed → noticed if possible.
+            # Skip if thread is already past unnoticed or in a terminal state
+            # (e.g., abandoned by a different worker — we just fire the event).
             if thread.state == "unnoticed":
                 state_machine.transition(thread.id, "noticed", session)
                 session.flush()
@@ -140,7 +143,6 @@ class ClaimingLoop:
             session.commit()
 
         # Fire event so the decision layer can act immediately
-        import datetime
         event_dict = {
             "thread_id": thread_id,
             "source": "claiming",
