@@ -15,13 +15,13 @@ Create a new branch from a base ref. Used at the start of implementation work.
 Commit a set of file changes to a branch and push. The primary output of implementation.
 
 **`open_pull_request(repo, branch, base, title, body)`**
-Open a PR from a branch. Called when implementation is ready for review.
+Open a PR from a branch. Called when implementation is ready for review. Must not be called until automated verification passes — see [Verification Requirement](#verification-requirement).
 
 **`update_pull_request(repo, pr_number, body)`**
 Update an existing PR description — typically to add context or respond to review.
 
 **`push_to_branch(repo, branch, files, message)`**
-Push additional commits to an existing branch. Used when addressing review feedback.
+Push additional commits to an existing branch. Used when addressing review feedback. Each push must also pass verification before the PR is marked ready again.
 
 ## Planning Actions
 
@@ -84,3 +84,21 @@ Primitives throw typed errors. The action executor catches these and either:
 - Escalates to a human (unexpected failures)
 
 Primitives do not silently swallow errors. A failed action that isn't surfaced leads the worker to incorrectly believe it completed work it didn't.
+
+## Verification Requirement
+
+Every code change produced by a worker must be verifiable before the PR is opened. This is not optional.
+
+**If verification exists** — tests, CI checks, linters, type checkers — the worker must confirm the change passes before calling `open_pull_request`.
+
+**If no verification exists**, the worker must create one before or alongside the change. Shipping a change that cannot be verified is not acceptable, even if the change appears correct. Add tests, add a CI step, configure a check — then make the change.
+
+**Verification must be automatable.** A check that requires human judgment to interpret is not sufficient. Every verification a worker relies on must be expressible as a command that passes or fails deterministically, without human involvement.
+
+In practice:
+- Adding or changing behavior → add or update tests that assert that behavior
+- No test harness exists → set one up as part of the task, before or alongside the implementation
+- No CI configured to run checks on PRs → configure it before opening the PR
+- `open_pull_request` is only called after all automated verification passes
+
+A worker that ships unverifiable changes is not a reliable worker.
