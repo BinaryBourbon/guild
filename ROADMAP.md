@@ -4,15 +4,15 @@ The captain-picard orchestrator reads this every cycle and writes the conversati
 
 ## Now
 
-- **g2-slice-5-e2e** — general-purpose-engineer (branch: g2-slice-5-e2e, see plan/g2-slice-5-e2e)
+*(waiting at G2 gate — operator go/no-go required)*
 
 ## Next
 
-*(empty — G2 is the next gate)*
+*(G3 planning will follow operator G2 decision)*
 
 ## Gated
 
 - **G0** ✓ — Wedge 2 (Thread-First) selected.
 - **G1** ✓ — Engineering plan + ADRs approved.
-- **G2** — First worker shippable end-to-end in a sandbox. Human decides.
+- **G2** — **READY FOR OPERATOR DECISION.** All five slices merged green (`5765ba1`). Worker is runnable: polling event loop, claiming loop, context assembly, decision layer, action primitives, asyncio entry point, Render deploy config. Operator decides whether to dispatch against a seeded sandbox issue.
 - **G3** — Self-hosting cutover.
