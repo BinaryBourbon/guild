@@ -9,13 +9,14 @@ from guild.primitives.meta import log_decision, update_thread_state, write_threa
 
 
 def _make_thread(session: Session, state: str = "noticed") -> Thread:
-    from python_ulid import ULID
+    from ulid import ULID
     thread = Thread(
         id=str(ULID()),
         anchor_type="github_issue",
         anchor_id="repo/owner#1",
+        anchor_url="https://github.com/repo/owner/issues/1",
+        anchor_title="test thread",
         state=state,
-        title="test thread",
     )
     session.add(thread)
     session.flush()

@@ -33,7 +33,7 @@ def write_thread_note(
             error=PrimitiveError("permanent", f"invalid note_type {note_type!r}; must be one of {valid}"),
         )
     try:
-        note = crud.write_note(session, thread_id=thread_id, note_type=note_type, body=body)
+        note = crud.write_note(thread_id, "worker", note_type, body, session)
         return ActionResult(success=True, data={"note_id": note.id})
     except Exception as exc:  # noqa: BLE001
         return ActionResult(success=False, error=PrimitiveError("transient", str(exc)))

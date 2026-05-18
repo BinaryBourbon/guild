@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 
 @dataclass(frozen=True)
-class PrimitiveError:
+class PrimitiveError(Exception):
     """Structured error from a primitive.
 
     kind:
@@ -59,7 +59,7 @@ def run_primitive(
                 if attempt < max_retries - 1:
                     _sleep(2.0**attempt)
                     continue
-                # Final attempt exhausted — return, do NOT raise (item #1 fix)
+                # Final attempt exhausted — return, do NOT raise
                 return ActionResult(
                     success=False,
                     error=PrimitiveError("transient", "max retries exceeded", {"last_error": exc.message}),
