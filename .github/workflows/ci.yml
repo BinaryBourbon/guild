@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: guild
+          POSTGRES_PASSWORD: guild
+          POSTGRES_DB: guild_test
+        ports:
+          - 5432:5432
+        options: >
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://guild:guild@localhost:5432/guild_test
+      # Placeholder values — Slice 1 makes no real API calls.
+      # Real secrets are added to GitHub Actions secrets before Slice 3.
+      GUILD_WORKER_GITHUB_TOKEN: placeholder-not-used-in-slice-1
+      ANTHROPIC_API_KEY: placeholder-not-used-in-slice-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest -v
