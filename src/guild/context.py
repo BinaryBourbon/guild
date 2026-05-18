@@ -60,7 +60,7 @@ def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
             "anchor_type": thread.anchor_type,
             "anchor_id": thread.anchor_id,
             "state": thread.state,
-            "title": thread.title,
+            "title": thread.anchor_title,
             "owner_id": thread.owner_id,
             "parent_thread_id": thread.parent_thread_id,
             "created_at": thread.created_at.isoformat() if thread.created_at else None,
@@ -88,7 +88,7 @@ def assemble_context(session: Session, thread_id: str) -> dict[str, Any]:
         "artifacts": [
             {
                 "id": a.id,
-                "artifact_type": a.artifact_type,
+                "artifact_type": a.type,
                 "url": a.url,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
             }

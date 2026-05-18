@@ -9,7 +9,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from python_ulid import ULID
+from ulid import ULID
 from sqlalchemy.orm import Session
 
 from guild.decision import DECIDE_TOOL, _DEFAULT_MODEL, decide
@@ -53,8 +53,9 @@ def _make_thread(session: Session) -> Thread:
         id=str(ULID()),
         anchor_type="github_issue",
         anchor_id="owner/repo#1",
+        anchor_url="https://github.com/owner/repo/issues/1",
+        anchor_title="Fix the bug",
         state="noticed",
-        title="Fix the bug",
     )
     session.add(thread)
     session.flush()

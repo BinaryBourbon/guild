@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime
 
 import pytest
-from python_ulid import ULID
+from ulid import ULID
 from sqlalchemy.orm import Session
 
 from guild.context import assemble_context
@@ -21,8 +21,9 @@ def _make_thread(session: Session, **kwargs) -> Thread:
         id=str(ULID()),
         anchor_type="github_issue",
         anchor_id="owner/repo#42",
+        anchor_url="https://github.com/repo/owner/issues/42",
+        anchor_title="test",
         state="noticed",
-        title="test",
         **kwargs,
     )
     session.add(thread)
@@ -72,6 +73,7 @@ def test_assemble_context_with_notes(session):
     thread = _make_thread(session)
     n = ThreadNote(
         id=str(ULID()), thread_id=thread.id,
+        author_id="worker",
         note_type="status", body="started working",
     )
     session.add(n)
@@ -87,7 +89,7 @@ def test_assemble_context_with_artifacts(session):
     thread = _make_thread(session)
     a = ThreadArtifact(
         id=str(ULID()), thread_id=thread.id,
-        artifact_type="pull_request", url="https://github.com/o/r/pull/1",
+        type="pull_request", external_id="1", url="https://github.com/o/r/pull/1",
     )
     session.add(a)
     session.flush()
