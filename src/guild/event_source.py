@@ -61,6 +61,11 @@ class PollingEventSource(EventSource):
     Dedup contract: write_event is called with event_id set to a hash of
     (thread_id, source, event_type, anchor_id+updated_at). If the DB already
     has that ID, the INSERT is silently ignored — no double-writes.
+
+    Handler contract: on_event handler is only called when a genuinely new
+    event is inserted (RETURNING clause returns a row). Re-polling unchanged
+    GitHub state does not trigger the handler — and therefore does not call
+    the Anthropic API.
     """
 
     def __init__(
@@ -142,34 +147,40 @@ class PollingEventSource(EventSource):
             "number": issue_data.get("number"),
         }
 
+        inserted = False
         try:
             with self._session_factory() as session:
-                stmt = pg_insert(ThreadEvent).values(
-                    id=event_id,
-                    thread_id=thread["id"],
-                    source="github",
-                    type="issue.polled",
-                    actor_id=None,
-                    actor_name=None,
-                    timestamp=now,
-                    payload=payload,
-                ).on_conflict_do_nothing(index_elements=["id"])
-                session.execute(stmt)
+                stmt = (
+                    pg_insert(ThreadEvent)
+                    .values(
+                        id=event_id,
+                        thread_id=thread["id"],
+                        source="github",
+                        type="issue.polled",
+                        actor_id=None,
+                        actor_name=None,
+                        timestamp=now,
+                        payload=payload,
+                    )
+                    .on_conflict_do_nothing(index_elements=["id"])
+                    .returning(ThreadEvent.id)
+                )
+                result = session.execute(stmt)
+                inserted = result.fetchone() is not None
                 session.commit()
         except Exception:
             logger.exception("Failed to write event for thread %s", thread["id"])
             return
 
-        event_dict = {
-            "id": event_id,
-            "thread_id": thread["id"],
-            "source": "github",
-            "type": "issue.polled",
-            "timestamp": now.isoformat(),
-            "payload": payload,
-        }
-
-        if self._handler is not None:
+        if inserted and self._handler is not None:
+            event_dict = {
+                "id": event_id,
+                "thread_id": thread["id"],
+                "source": "github",
+                "type": "issue.polled",
+                "timestamp": now.isoformat(),
+                "payload": payload,
+            }
             try:
                 self._handler(thread["id"], event_dict)
             except Exception:
