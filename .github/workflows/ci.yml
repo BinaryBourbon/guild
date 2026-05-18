@@ -26,10 +26,11 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://guild:guild@localhost:5432/guild_test
-      # Placeholder values — Slice 1 makes no real API calls.
-      # Real secrets are added to GitHub Actions secrets before Slice 3.
-      GUILD_WORKER_GITHUB_TOKEN: placeholder-not-used-in-slice-1
-      ANTHROPIC_API_KEY: placeholder-not-used-in-slice-1
+      # Placeholder values — real secrets are in GitHub Actions secrets
+      GUILD_WORKER_GITHUB_TOKEN: placeholder-not-used-in-tests
+      ANTHROPIC_API_KEY: placeholder-not-used-in-tests
+      GUILD_WORKER_ID: placeholder-worker-id
+      GUILD_REPO: BinaryBourbon/guild
 
     steps:
       - uses: actions/checkout@v4

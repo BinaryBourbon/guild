@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: guild-worker
+    runtime: python
+    buildCommand: pip install -e .
+    startCommand: guild
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GUILD_WORKER_GITHUB_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GUILD_WORKER_ID
+        sync: false
+      - key: GUILD_REPO
+        sync: false
+      - key: GUILD_POLL_INTERVAL_SECONDS
+        value: "120"
+      - key: GUILD_CLAIM_INTERVAL_SECONDS
+        value: "300"
+      - key: PORT
+        value: "8000"
