@@ -32,10 +32,14 @@ class PrimitiveError(Exception):
 
 @dataclass
 class ActionResult:
-    """Outcome of running a primitive."""
+    """Outcome of running a primitive.
+
+    artifact: represents a record written to thread_artifacts (branch, PR,
+    commit, comment), not arbitrary data.  None when no artifact was produced.
+    """
 
     success: bool
-    data: Any = None
+    artifact: dict | None = None
     error: PrimitiveError | None = None
 
 
